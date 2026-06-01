@@ -552,7 +552,7 @@ function Index() {
                 <h2 className="mb-2 text-xl font-bold text-slate-900">Opções de Hospedagem</h2>
                 <p className="mb-5 text-xs text-slate-500 leading-relaxed max-w-2xl">
                   <Info className="inline h-3.5 w-3.5 mr-1 text-slate-400 -mt-0.5" />
-                  A pontuação gerada permite utilizar diárias em <strong className="text-slate-700">apenas uma</strong> das opções de resort, tipo de acomodação e temporada por reserva. As alternativas abaixo <strong className="text-slate-700">não são cumulativas</strong>.
+                  As alternativas abaixo <strong className="text-slate-700">não são cumulativas</strong>.
                 </p>
                 <div className="print-resorts grid gap-5 lg:grid-cols-2">
                   {RESORTS.flatMap((resort, index) => {
