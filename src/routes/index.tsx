@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Calculator, Calendar, Users, Sparkles, Info, AlertCircle, AlertTriangle, Printer, RotateCw, History, Check, X, Trash2 } from "lucide-react";
+import { getConfig, CONFIG_UPDATED_EVENT, SEASONS } from "../lib/config-store";
+import type { AppConfig, Resort, Season } from "../lib/config-store";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -12,73 +14,6 @@ export const Route = createFileRoute("/")({
   }),
 });
 
-const POINT_COST = 0.17;
-const MIN_NIGHTS = 2;
-const MIN_POINTS = 8000;
-const MIN_BALANCE = MIN_POINTS * POINT_COST; // R$ 1.360,00
-
-type Season = "Baixa" | "Média" | "Alta" | "Altíssima";
-const SEASONS: Season[] = ["Baixa", "Média", "Alta", "Altíssima"];
-
-type ProposalStatus = "pendente" | "aceita" | "nao_aceita" | "inelegivel";
-type SimulationEntry = {
-  id: string;
-  createdAt: string;
-  balance: number;
-  points: number;
-  status: ProposalStatus;
-  rejectionReason?: string;
-};
-
-type Room = {
-  type: string;
-  shortType: string;
-  capacity: number;
-  costs: Partial<Record<Season, number>>;
-};
-type Resort = { name: string; tagline: string; rooms: Room[] };
-
-const RESORTS: Resort[] = [
-  {
-    name: "Park GAV Resort",
-    tagline: "Diversão para a família",
-    rooms: [
-      { type: "1 Quarto", shortType: "1Q", capacity: 5, costs: { Baixa: 2800, Média: 3000, Alta: 6300, Altíssima: 6500 } },
-      { type: "2 Quartos", shortType: "2Q", capacity: 8, costs: { Baixa: 4600, Média: 4800, Alta: 8900, Altíssima: 9200 } },
-    ],
-  },
-  {
-    name: "Exclusive GAV Resort",
-    tagline: "Experiência exclusiva",
-    rooms: [
-      { type: "1 Quarto", shortType: "1Q", capacity: 4, costs: { Baixa: 2600, Média: 2800, Alta: 5900, Altíssima: 6000 } },
-      { type: "2 Quartos", shortType: "2Q", capacity: 7, costs: { Baixa: 4300, Média: 4500, Alta: 8000, Altíssima: 8300 } },
-    ],
-  },
-  {
-    name: "Premium GAV Resort",
-    tagline: "Conforto refinado",
-    rooms: [
-      { type: "1 Quarto", shortType: "1Q", capacity: 4, costs: { Baixa: 2500, Média: 2600, Alta: 5700, Altíssima: 5900 } },
-      { type: "2 Quartos", shortType: "2Q", capacity: 7, costs: { Baixa: 4200, Média: 4500, Alta: 9000, Altíssima: 9300 } },
-    ],
-  },
-  {
-    name: "Porto Alto Resort",
-    tagline: "Beira-mar premium",
-    rooms: [
-      { type: "1 Quarto", shortType: "1Q", capacity: 4, costs: { Média: 6300, Alta: 9100, Altíssima: 13600 } },
-      { type: "2 Quartos", shortType: "2Q", capacity: 6, costs: { Média: 12400, Alta: 18000, Altíssima: 27000 } },
-    ],
-  },
-  {
-    name: "Pyrenéus Residence",
-    tagline: "Águas termais",
-    rooms: [
-      { type: "1 Quarto", shortType: "1Q", capacity: 4, costs: { Baixa: 4600, Média: 4800, Alta: 7300, Altíssima: 9100 } },
-    ],
-  },
-];
 
 function formatBRL(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -93,11 +28,39 @@ function maskBRL(digits: string) {
   return reais.toLocaleString("pt-BR") + "," + cents.toString().padStart(2, "0");
 }
 
+type ProposalStatus = "pendente" | "aceita" | "nao_aceita" | "inelegivel";
+type SimulationEntry = {
+  id: string;
+  createdAt: string;
+  balance: number;
+  points: number;
+  status: ProposalStatus;
+  rejectionReason?: string;
+};
+
 function Index() {
+  // ===== Config from store =====
+  const [config, setConfig] = useState<AppConfig>(getConfig);
+
+  useEffect(() => {
+    const handler = () => setConfig(getConfig());
+    window.addEventListener(CONFIG_UPDATED_EVENT, handler);
+    window.addEventListener("storage", handler);
+    return () => {
+      window.removeEventListener(CONFIG_UPDATED_EVENT, handler);
+      window.removeEventListener("storage", handler);
+    };
+  }, []);
+
+  const POINT_COST = config.pointCost;
+  const MIN_POINTS = config.minPoints;
+  const MIN_NIGHTS = config.minNights;
+  const MIN_BALANCE = MIN_POINTS * POINT_COST;
+  const RESORTS = config.resorts;
+
   const [masked, setMasked] = useState("");
   const [flipped, setFlipped] = useState<Record<string, boolean>>({});
   const [exportDate, setExportDate] = useState<string | null>(null);
-  
 
   const balance = useMemo(() => {
     const d = masked.replace(/\D/g, "");

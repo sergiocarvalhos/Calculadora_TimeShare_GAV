@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   LayoutDashboard,
   History,
@@ -24,8 +24,16 @@ import {
   User,
   Lock,
   FileText,
+  Settings,
+  Save,
+  PlusCircle,
+  Hotel,
+  Edit3,
+  RotateCcw,
 } from "lucide-react";
 import { useIsMobile } from "../hooks/use-mobile";
+import { getConfig, saveConfig, resetConfig, generateId, SEASONS, CONFIG_UPDATED_EVENT } from "../lib/config-store";
+import type { AppConfig, Resort, Room, Season } from "../lib/config-store";
 
 export const Route = createFileRoute("/admin")({
   component: AdminDashboard,
@@ -122,8 +130,31 @@ function formatBRL(value: number) {
 function AdminDashboard() {
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<"dashboard" | "history" | "allowlist">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "history" | "allowlist" | "parameters">("dashboard");
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+
+  // ===== CONFIG STATE =====
+  const [config, setConfig] = useState<AppConfig>(getConfig);
+  const [configSaved, setConfigSaved] = useState(false);
+  const [editingResortId, setEditingResortId] = useState<string | null>(null);
+  const [addResortOpen, setAddResortOpen] = useState(false);
+  const [newResortName, setNewResortName] = useState("");
+  const [newResortTagline, setNewResortTagline] = useState("");
+  const [addRoomForResort, setAddRoomForResort] = useState<string | null>(null);
+  const [newRoomType, setNewRoomType] = useState("");
+  const [newRoomShort, setNewRoomShort] = useState("");
+  const [newRoomCapacity, setNewRoomCapacity] = useState(4);
+  const [deleteResortConfirm, setDeleteResortConfirm] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handler = () => setConfig(getConfig());
+    window.addEventListener(CONFIG_UPDATED_EVENT, handler);
+    window.addEventListener("storage", handler);
+    return () => {
+      window.removeEventListener(CONFIG_UPDATED_EVENT, handler);
+      window.removeEventListener("storage", handler);
+    };
+  }, []);
 
   // ===== USERS (mock data) =====
   const [users, setUsers] = useState<UserAccess[]>([
@@ -251,10 +282,117 @@ function AdminDashboard() {
     });
   }, [simulations, historySearch]);
 
+  // ===== CONFIG HANDLERS =====
+  const handleSaveConfig = () => {
+    saveConfig(config);
+    setConfigSaved(true);
+    setTimeout(() => setConfigSaved(false), 3000);
+  };
+
+  const handleResetConfig = () => {
+    if (window.confirm("Deseja restaurar todos os parâmetros aos valores padrão? Esta ação não pode ser desfeita.")) {
+      resetConfig();
+      setConfig(getConfig());
+      setConfigSaved(true);
+      setTimeout(() => setConfigSaved(false), 3000);
+    }
+  };
+
+  const updateConfigField = (field: keyof AppConfig, value: number) => {
+    setConfig((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const updateResortField = (resortId: string, field: "name" | "tagline", value: string) => {
+    setConfig((prev) => ({
+      ...prev,
+      resorts: prev.resorts.map((r) => (r.id === resortId ? { ...r, [field]: value } : r)),
+    }));
+  };
+
+  const updateRoomCost = (resortId: string, roomId: string, season: Season, value: string) => {
+    const num = value === "" ? undefined : parseInt(value, 10);
+    setConfig((prev) => ({
+      ...prev,
+      resorts: prev.resorts.map((r) =>
+        r.id === resortId
+          ? {
+              ...r,
+              rooms: r.rooms.map((rm) =>
+                rm.id === roomId
+                  ? { ...rm, costs: { ...rm.costs, [season]: isNaN(num as number) ? undefined : num } }
+                  : rm
+              ),
+            }
+          : r
+      ),
+    }));
+  };
+
+  const updateRoomCapacity = (resortId: string, roomId: string, value: number) => {
+    setConfig((prev) => ({
+      ...prev,
+      resorts: prev.resorts.map((r) =>
+        r.id === resortId
+          ? { ...r, rooms: r.rooms.map((rm) => (rm.id === roomId ? { ...rm, capacity: value } : rm)) }
+          : r
+      ),
+    }));
+  };
+
+  const handleAddResort = () => {
+    if (!newResortName.trim()) return;
+    const newResort: Resort = {
+      id: generateId("resort"),
+      name: newResortName.trim(),
+      tagline: newResortTagline.trim() || "Novo empreendimento",
+      rooms: [],
+    };
+    setConfig((prev) => ({ ...prev, resorts: [...prev.resorts, newResort] }));
+    setNewResortName("");
+    setNewResortTagline("");
+    setAddResortOpen(false);
+  };
+
+  const handleDeleteResort = (resortId: string) => {
+    setConfig((prev) => ({ ...prev, resorts: prev.resorts.filter((r) => r.id !== resortId) }));
+    setDeleteResortConfirm(null);
+  };
+
+  const handleAddRoom = (resortId: string) => {
+    if (!newRoomType.trim()) return;
+    const newRoom: Room = {
+      id: generateId("room"),
+      type: newRoomType.trim(),
+      shortType: newRoomShort.trim() || newRoomType.trim().substring(0, 2),
+      capacity: newRoomCapacity,
+      costs: {},
+    };
+    setConfig((prev) => ({
+      ...prev,
+      resorts: prev.resorts.map((r) => (r.id === resortId ? { ...r, rooms: [...r.rooms, newRoom] } : r)),
+    }));
+    setNewRoomType("");
+    setNewRoomShort("");
+    setNewRoomCapacity(4);
+    setAddRoomForResort(null);
+  };
+
+  const handleDeleteRoom = (resortId: string, roomId: string) => {
+    setConfig((prev) => ({
+      ...prev,
+      resorts: prev.resorts.map((r) =>
+        r.id === resortId ? { ...r, rooms: r.rooms.filter((rm) => rm.id !== roomId) } : r
+      ),
+    }));
+  };
+
   const navigationItems = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "history", label: "Histórico de Simulações", icon: History },
     { id: "allowlist", label: "Acessos Autorizados", icon: UserCheck },
+    ...(currentUser.role === "Administrador"
+      ? [{ id: "parameters" as const, label: "Parâmetros", icon: Settings }]
+      : []),
   ] as const;
 
   const roleStyles = getRoleBadgeStyles(currentUser.role);
@@ -369,7 +507,9 @@ function AdminDashboard() {
                 ? "Acessos Autorizados"
                 : activeTab === "history"
                   ? "Histórico de Simulações"
-                  : "Dashboard Geral"}
+                  : activeTab === "parameters"
+                    ? "Parâmetros de Configuração"
+                    : "Dashboard Geral"}
             </h1>
           </div>
 
@@ -756,6 +896,280 @@ function AdminDashboard() {
               </div>
             </div>
           )}
+
+          {/* ==================== TAB 4: PARÂMETROS (ADMIN ONLY) ==================== */}
+          {activeTab === "parameters" && currentUser.role === "Administrador" && (
+            <div className="space-y-6 animate-in fade-in duration-200">
+              {/* SUCCESS TOAST */}
+              {configSaved && (
+                <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 p-4 rounded-xl text-emerald-800 animate-in fade-in duration-200">
+                  <CheckCircle className="h-5 w-5 flex-shrink-0 text-emerald-600" />
+                  <p className="text-sm font-bold">Parâmetros salvos com sucesso!</p>
+                </div>
+              )}
+
+              {/* ACTION BUTTONS */}
+              <div className="flex flex-wrap gap-3 justify-end">
+                <button
+                  type="button"
+                  onClick={handleResetConfig}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 px-4 py-2.5 text-xs font-semibold text-slate-600 transition"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Restaurar Padrão
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveConfig}
+                  className="inline-flex items-center gap-2 rounded-lg bg-[#002B5C] hover:opacity-90 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition-opacity"
+                >
+                  <Save className="h-4 w-4" />
+                  Salvar Alterações
+                </button>
+              </div>
+
+              {/* SECTION 1: CONVERSÃO DE PONTOS */}
+              <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6">
+                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <DollarSign className="h-4 w-4 text-[#002B5C]" />
+                  Conversão de Pontos
+                </h3>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Valor do Ponto (R$)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      value={config.pointCost}
+                      onChange={(e) => updateConfigField("pointCost", parseFloat(e.target.value) || 0.01)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-sm font-bold text-slate-800 outline-none focus:bg-white focus:border-[#002B5C] focus:ring-2 focus:ring-blue-100 transition"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">Atualmente: R$ {config.pointCost.toFixed(2)} por ponto</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Mínimo de Pontos</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={config.minPoints}
+                      onChange={(e) => updateConfigField("minPoints", parseInt(e.target.value) || 1)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-sm font-bold text-slate-800 outline-none focus:bg-white focus:border-[#002B5C] focus:ring-2 focus:ring-blue-100 transition"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">Saldo mínimo: {formatBRL(config.minPoints * config.pointCost)}</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Mín. Diárias / Reserva</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={config.minNights}
+                      onChange={(e) => updateConfigField("minNights", parseInt(e.target.value) || 1)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-sm font-bold text-slate-800 outline-none focus:bg-white focus:border-[#002B5C] focus:ring-2 focus:ring-blue-100 transition"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">Diárias mínimas por reserva</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 2: EMPREENDIMENTOS */}
+              <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                    <Hotel className="h-4 w-4 text-[#002B5C]" />
+                    Empreendimentos ({config.resorts.length})
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setAddResortOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#002B5C] hover:opacity-90 px-3 py-2 text-xs font-semibold text-white shadow-sm transition"
+                  >
+                    <PlusCircle className="h-3.5 w-3.5" />
+                    Novo Empreendimento
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {config.resorts.map((resort) => (
+                    <div key={resort.id} className="border border-slate-200 rounded-xl overflow-hidden">
+                      {/* Resort Header */}
+                      <div className="bg-slate-50 p-4 flex items-center justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          {editingResortId === resort.id ? (
+                            <div className="flex flex-col sm:flex-row gap-2">
+                              <input
+                                value={resort.name}
+                                onChange={(e) => updateResortField(resort.id, "name", e.target.value)}
+                                className="flex-1 bg-white border border-slate-200 rounded-lg py-1.5 px-3 text-sm font-semibold text-slate-800 outline-none focus:border-[#002B5C] focus:ring-2 focus:ring-blue-100"
+                                placeholder="Nome do resort"
+                              />
+                              <input
+                                value={resort.tagline}
+                                onChange={(e) => updateResortField(resort.id, "tagline", e.target.value)}
+                                className="flex-1 bg-white border border-slate-200 rounded-lg py-1.5 px-3 text-sm text-slate-600 outline-none focus:border-[#002B5C] focus:ring-2 focus:ring-blue-100"
+                                placeholder="Descrição curta"
+                              />
+                              <button
+                                onClick={() => setEditingResortId(null)}
+                                className="px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 rounded-lg border border-emerald-200 hover:bg-emerald-100 transition"
+                              >
+                                OK
+                              </button>
+                            </div>
+                          ) : (
+                            <div>
+                              <span className="text-sm font-bold text-slate-800">{resort.name}</span>
+                              <span className="text-xs text-slate-500 ml-2">{resort.tagline}</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <button
+                            onClick={() => setEditingResortId(editingResortId === resort.id ? null : resort.id)}
+                            className="p-1.5 rounded-md hover:bg-slate-200 text-slate-500 transition"
+                            title="Editar"
+                          >
+                            <Edit3 className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setDeleteResortConfirm(resort.id)}
+                            className="p-1.5 rounded-md hover:bg-rose-100 text-rose-500 transition"
+                            title="Excluir empreendimento"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Rooms + Points Table */}
+                      <div className="p-4">
+                        {resort.rooms.length > 0 ? (
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="border-b border-slate-200">
+                                  <th className="py-2 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider">Unidade</th>
+                                  <th className="py-2 text-center text-[10px] font-bold text-slate-500 uppercase tracking-wider">Cap.</th>
+                                  {SEASONS.map((s) => (
+                                    <th key={s} className="py-2 text-center text-[10px] font-bold uppercase tracking-wider" style={{ color: "#002B5C" }}>{s}</th>
+                                  ))}
+                                  <th className="py-2 w-8"></th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {resort.rooms.map((room) => (
+                                  <tr key={room.id} className="border-b border-slate-100">
+                                    <td className="py-2 pr-2">
+                                      <span className="text-xs font-semibold text-slate-800">{room.type}</span>
+                                      <span className="text-[10px] text-slate-400 ml-1">({room.shortType})</span>
+                                    </td>
+                                    <td className="py-2 text-center">
+                                      <input
+                                        type="number"
+                                        min="1"
+                                        max="20"
+                                        value={room.capacity}
+                                        onChange={(e) => updateRoomCapacity(resort.id, room.id, parseInt(e.target.value) || 1)}
+                                        className="w-12 bg-slate-50 border border-slate-200 rounded py-1 px-1.5 text-xs text-center font-semibold text-slate-800 outline-none focus:border-[#002B5C] focus:ring-1 focus:ring-blue-100"
+                                      />
+                                    </td>
+                                    {SEASONS.map((season) => (
+                                      <td key={season} className="py-2 px-1 text-center">
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          placeholder="—"
+                                          value={room.costs[season] ?? ""}
+                                          onChange={(e) => updateRoomCost(resort.id, room.id, season, e.target.value)}
+                                          className="w-16 bg-slate-50 border border-slate-200 rounded py-1 px-1.5 text-xs text-center tabular-nums text-slate-700 outline-none focus:border-[#002B5C] focus:ring-1 focus:ring-blue-100 placeholder:text-slate-300"
+                                        />
+                                      </td>
+                                    ))}
+                                    <td className="py-2">
+                                      <button
+                                        onClick={() => handleDeleteRoom(resort.id, room.id)}
+                                        className="p-1 rounded hover:bg-rose-50 text-rose-400 hover:text-rose-600 transition"
+                                        title="Remover unidade"
+                                      >
+                                        <X className="h-3.5 w-3.5" />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-400 italic text-center py-4">Nenhuma unidade cadastrada.</p>
+                        )}
+
+                        {/* Add Room */}
+                        {addRoomForResort === resort.id ? (
+                          <div className="mt-3 flex flex-wrap items-end gap-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Tipo</label>
+                              <input
+                                value={newRoomType}
+                                onChange={(e) => setNewRoomType(e.target.value)}
+                                placeholder="Ex: 1 Quarto"
+                                className="w-28 bg-white border border-slate-200 rounded py-1.5 px-2 text-xs text-slate-800 outline-none focus:border-[#002B5C]"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Sigla</label>
+                              <input
+                                value={newRoomShort}
+                                onChange={(e) => setNewRoomShort(e.target.value)}
+                                placeholder="Ex: 1Q"
+                                className="w-16 bg-white border border-slate-200 rounded py-1.5 px-2 text-xs text-slate-800 outline-none focus:border-[#002B5C]"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Cap.</label>
+                              <input
+                                type="number"
+                                min="1"
+                                value={newRoomCapacity}
+                                onChange={(e) => setNewRoomCapacity(parseInt(e.target.value) || 1)}
+                                className="w-14 bg-white border border-slate-200 rounded py-1.5 px-2 text-xs text-slate-800 outline-none focus:border-[#002B5C]"
+                              />
+                            </div>
+                            <button
+                              onClick={() => handleAddRoom(resort.id)}
+                              disabled={!newRoomType.trim()}
+                              className="rounded-lg bg-[#002B5C] hover:opacity-90 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition disabled:opacity-50"
+                            >
+                              Adicionar
+                            </button>
+                            <button
+                              onClick={() => setAddRoomForResort(null)}
+                              className="rounded-lg border border-slate-200 bg-white hover:bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-600 transition"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setAddRoomForResort(resort.id);
+                              setNewRoomType("");
+                              setNewRoomShort("");
+                              setNewRoomCapacity(4);
+                            }}
+                            className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-[#002B5C] hover:text-blue-800 transition"
+                          >
+                            <PlusCircle className="h-3.5 w-3.5" />
+                            Adicionar Unidade
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
         </div>
       </main>
 
@@ -978,6 +1392,97 @@ function AdminDashboard() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== MODAL: ADICIONAR RESORT ==================== */}
+      {addResortOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"
+            onClick={() => setAddResortOpen(false)}
+          />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-slate-50">
+              <div>
+                <h3 className="text-sm font-bold text-slate-800">Novo Empreendimento</h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">Cadastre um novo resort</p>
+              </div>
+              <button onClick={() => setAddResortOpen(false)} className="p-1.5 rounded-full hover:bg-slate-200 text-slate-500 transition">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Nome do Resort</label>
+                <input
+                  value={newResortName}
+                  onChange={(e) => setNewResortName(e.target.value)}
+                  placeholder="Ex: Beach GAV Resort"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-sm font-medium text-slate-800 outline-none focus:bg-white focus:border-[#002B5C] focus:ring-2 focus:ring-blue-100 transition"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Descrição Curta</label>
+                <input
+                  value={newResortTagline}
+                  onChange={(e) => setNewResortTagline(e.target.value)}
+                  placeholder="Ex: Paraíso à beira-mar"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-sm text-slate-600 outline-none focus:bg-white focus:border-[#002B5C] focus:ring-2 focus:ring-blue-100 transition"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 p-5 pt-0">
+              <button
+                onClick={() => setAddResortOpen(false)}
+                className="rounded-lg border border-slate-200 bg-white hover:bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-600 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleAddResort}
+                disabled={!newResortName.trim()}
+                className="rounded-lg bg-[#002B5C] hover:opacity-90 px-4 py-2 text-xs font-semibold text-white shadow-sm transition disabled:opacity-50"
+              >
+                Cadastrar Resort
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== MODAL: CONFIRMAR EXCLUSÃO DE RESORT ==================== */}
+      {deleteResortConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"
+            onClick={() => setDeleteResortConfirm(null)}
+          />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 text-center">
+              <div className="mx-auto w-12 h-12 rounded-full bg-rose-100 flex items-center justify-center mb-4">
+                <Trash2 className="h-5 w-5 text-rose-600" />
+              </div>
+              <h3 className="text-sm font-bold text-slate-800 mb-2">Excluir empreendimento?</h3>
+              <p className="text-xs text-slate-500">
+                O resort <strong>{config.resorts.find((r) => r.id === deleteResortConfirm)?.name}</strong> e todas as suas unidades serão removidos. Clique em "Salvar Alterações" para confirmar.
+              </p>
+            </div>
+            <div className="flex justify-center gap-3 p-5 pt-0">
+              <button
+                onClick={() => setDeleteResortConfirm(null)}
+                className="rounded-lg border border-slate-200 bg-white hover:bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-600 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => handleDeleteResort(deleteResortConfirm)}
+                className="rounded-lg bg-rose-600 hover:opacity-90 px-4 py-2 text-xs font-semibold text-white shadow-sm transition"
+              >
+                Excluir
+              </button>
+            </div>
           </div>
         </div>
       )}
