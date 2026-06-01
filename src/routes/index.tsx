@@ -314,6 +314,13 @@ function Index() {
             gap: 2mm !important;
             margin: 0 !important;
           }
+          .print-resorts .or-separator {
+            grid-column: 1 / -1 !important;
+            padding: 0.5mm 0 !important;
+          }
+          .print-resorts .or-separator span {
+            font-size: 7pt !important;
+          }
 
           /* Cards (sempre face frontal) */
           .flip-card, .flip-card-inner, .flip-face {
@@ -543,11 +550,27 @@ function Index() {
               <section>
                 <h2 className="mb-4 text-xl font-bold text-slate-900">Opções de Hospedagem</h2>
                 <div className="print-resorts grid gap-5 lg:grid-cols-2">
-                  {RESORTS.map((resort) => {
+                  {RESORTS.flatMap((resort, index) => {
                     const isFlipped = !!flipped[resort.name];
                     // Tighter approximation: header + per-room compact block
                     const minH = 150 + resort.rooms.length * 135;
-                    return (
+                    const items = [];
+
+                    // Add "ou" separator before every card except the first
+                    if (index > 0) {
+                      items.push(
+                        <div
+                          key={`sep-${resort.name}`}
+                          className="or-separator flex items-center justify-center gap-4 py-1 lg:col-span-2"
+                        >
+                          <div className="h-px flex-1 bg-slate-200" />
+                          <span className="text-sm font-bold uppercase tracking-widest text-slate-400">ou</span>
+                          <div className="h-px flex-1 bg-slate-200" />
+                        </div>
+                      );
+                    }
+
+                    items.push(
                       <div
                         key={resort.name}
                         className={`flip-card ${isFlipped ? "flipped" : ""}`}
@@ -701,6 +724,8 @@ function Index() {
                         </div>
                       </div>
                     );
+
+                    return items;
                   })}
                 </div>
               </section>
