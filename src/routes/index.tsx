@@ -314,12 +314,13 @@ function Index() {
             gap: 2mm !important;
             margin: 0 !important;
           }
-          .print-resorts .or-separator {
+          .print-resorts .resort-info-note {
             grid-column: 1 / -1 !important;
-            padding: 0.5mm 0 !important;
+            padding: 1mm 2mm !important;
+            font-size: 6.5pt !important;
           }
-          .print-resorts .or-separator span {
-            font-size: 7pt !important;
+          .season-or-label {
+            font-size: 6pt !important;
           }
 
           /* Cards (sempre face frontal) */
@@ -548,7 +549,11 @@ function Index() {
 
               {/* Resorts */}
               <section>
-                <h2 className="mb-4 text-xl font-bold text-slate-900">Opções de Hospedagem</h2>
+                <h2 className="mb-2 text-xl font-bold text-slate-900">Opções de Hospedagem</h2>
+                <p className="mb-5 text-xs text-slate-500 leading-relaxed max-w-2xl">
+                  <Info className="inline h-3.5 w-3.5 mr-1 text-slate-400 -mt-0.5" />
+                  A pontuação gerada permite utilizar diárias em <strong className="text-slate-700">apenas uma</strong> das opções de resort, tipo de acomodação e temporada por reserva. As alternativas abaixo <strong className="text-slate-700">não são cumulativas</strong>.
+                </p>
                 <div className="print-resorts grid gap-5 lg:grid-cols-2">
                   {RESORTS.flatMap((resort, index) => {
                     const isFlipped = !!flipped[resort.name];
@@ -556,19 +561,7 @@ function Index() {
                     const minH = 150 + resort.rooms.length * 135;
                     const items = [];
 
-                    // Add "ou" separator before every card except the first
-                    if (index > 0) {
-                      items.push(
-                        <div
-                          key={`sep-${resort.name}`}
-                          className="or-separator flex items-center justify-center gap-4 py-1 lg:col-span-2"
-                        >
-                          <div className="h-px flex-1 bg-slate-200" />
-                          <span className="text-sm font-bold uppercase tracking-widest text-slate-400">ou</span>
-                          <div className="h-px flex-1 bg-slate-200" />
-                        </div>
-                      );
-                    }
+                    // No separator between resorts (explanatory text is now above the grid)
 
                     items.push(
                       <div
@@ -603,58 +596,73 @@ function Index() {
                                       <Info className="h-3 w-3 text-slate-400" />
                                     </div>
                                   </div>
-                                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                                    {SEASONS.map((season) => {
+                                  <div className="flex flex-wrap items-stretch gap-y-2">
+                                    {SEASONS.map((season, sIdx) => {
                                       const cost = room.costs[season];
-                                      if (!cost) {
-                                        return (
-                                          <div
-                                            key={season}
-                                            className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-2.5 text-center"
-                                          >
-                                            <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 leading-tight min-h-[24px]">
-                                              {season}
-                                              <br />
-                                              Temporada
-                                            </div>
-                                            <div className="mt-1 text-[11px] text-slate-400">Indisponível</div>
-                                          </div>
-                                        );
-                                      }
-                                      const nights = Math.floor(points / cost);
-                                      const enough = nights >= MIN_NIGHTS;
-                                      return (
+                                      const seasonCard = !cost ? (
                                         <div
                                           key={season}
-                                          className={`rounded-lg border p-2.5 text-center ${
-                                            enough ? "border-slate-200 bg-white" : "border-amber-200 bg-amber-50"
-                                          }`}
+                                          className="flex-1 min-w-[calc(50%-16px)] sm:min-w-0 rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-2.5 text-center"
                                         >
-                                          <div
-                                            className="text-[10px] font-semibold uppercase tracking-wider leading-tight min-h-[24px]"
-                                            style={{ color: enough ? "#002B5C" : "#92400e" }}
-                                          >
+                                          <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 leading-tight min-h-[24px]">
                                             {season}
                                             <br />
                                             Temporada
                                           </div>
-                                          {enough ? (
-                                            <>
-                                              <div className="mt-1 text-xl font-bold tabular-nums text-slate-900">
-                                                {nights}
-                                              </div>
-                                              <div className="text-[10px] text-slate-500">
-                                                {nights === 1 ? "diária" : "diárias"}
-                                              </div>
-                                            </>
-                                          ) : (
-                                            <div className="mt-1 inline-flex items-center justify-center gap-1 text-[10px] font-semibold text-amber-700">
-                                              <AlertCircle className="h-3 w-3" />
-                                              Insuficiente
-                                            </div>
-                                          )}
+                                          <div className="mt-1 text-[11px] text-slate-400">Indisponível</div>
                                         </div>
-                                      );
+                                      ) : (() => {
+                                        const nights = Math.floor(points / cost);
+                                        const enough = nights >= MIN_NIGHTS;
+                                        return (
+                                          <div
+                                            key={season}
+                                            className={`flex-1 min-w-[calc(50%-16px)] sm:min-w-0 rounded-lg border p-2.5 text-center ${
+                                              enough ? "border-slate-200 bg-white" : "border-amber-200 bg-amber-50"
+                                            }`}
+                                          >
+                                            <div
+                                              className="text-[10px] font-semibold uppercase tracking-wider leading-tight min-h-[24px]"
+                                              style={{ color: enough ? "#002B5C" : "#92400e" }}
+                                            >
+                                              {season}
+                                              <br />
+                                              Temporada
+                                            </div>
+                                            {enough ? (
+                                              <>
+                                                <div className="mt-1 text-xl font-bold tabular-nums text-slate-900">
+                                                  {nights}
+                                                </div>
+                                                <div className="text-[10px] text-slate-500">
+                                                  {nights === 1 ? "diária" : "diárias"}
+                                                </div>
+                                              </>
+                                            ) : (
+                                              <div className="mt-1 inline-flex items-center justify-center gap-1 text-[10px] font-semibold text-amber-700">
+                                                <AlertCircle className="h-3 w-3" />
+                                                Insuficiente
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })();
+
+                                      // Insert "ou" label between season cards
+                                      if (sIdx < SEASONS.length - 1) {
+                                        return (
+                                          <>
+                                            {seasonCard}
+                                            <div
+                                              key={`ou-${season}`}
+                                              className="season-or-label flex items-center justify-center px-1"
+                                            >
+                                              <span className="text-[10px] font-bold text-slate-400 uppercase">ou</span>
+                                            </div>
+                                          </>
+                                        );
+                                      }
+                                      return seasonCard;
                                     })}
                                   </div>
                                 </div>
