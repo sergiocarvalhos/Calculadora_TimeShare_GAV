@@ -18,7 +18,12 @@ import {
   Shield,
   Activity,
   AlertCircle,
-  UserPlus
+  UserPlus,
+  Trash2,
+  ChevronDown,
+  User,
+  Lock,
+  FileText,
 } from "lucide-react";
 import { useIsMobile } from "../hooks/use-mobile";
 
@@ -31,6 +36,9 @@ export const Route = createFileRoute("/admin")({
     ],
   }),
 });
+
+// ===== TYPES =====
+type Role = "Consultor" | "Supervisor" | "Administrador";
 
 type Simulation = {
   id: string;
@@ -46,9 +54,60 @@ type Simulation = {
 type UserAccess = {
   id: string;
   email: string;
-  role: "Consultor" | "Administrador";
+  role: Role;
   active: boolean;
 };
+
+// ===== PERMISSION HELPERS =====
+function canCreateUsers(role: Role): boolean {
+  return role === "Administrador" || role === "Supervisor";
+}
+
+function getCreatableRoles(role: Role): Role[] {
+  if (role === "Administrador") return ["Consultor", "Supervisor", "Administrador"];
+  if (role === "Supervisor") return ["Consultor"];
+  return [];
+}
+
+function canToggleUser(currentRole: Role, targetUser: UserAccess, currentUserId: string): boolean {
+  // Nobody can toggle themselves
+  if (targetUser.id === currentUserId) return false;
+  // Admin can toggle everyone except themselves (handled above)
+  if (currentRole === "Administrador") {
+    // But cannot deactivate another Admin
+    return targetUser.role !== "Administrador";
+  }
+  // Supervisor can only toggle Consultores
+  if (currentRole === "Supervisor") return targetUser.role === "Consultor";
+  // Consultor can't toggle anyone
+  return false;
+}
+
+function canDeleteSimulation(role: Role): boolean {
+  return role === "Administrador" || role === "Supervisor";
+}
+
+function getRoleBadgeStyles(role: Role): { bg: string; text: string; border: string } {
+  switch (role) {
+    case "Administrador":
+      return { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-100" };
+    case "Supervisor":
+      return { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-100" };
+    case "Consultor":
+      return { bg: "bg-slate-50", text: "text-slate-600", border: "border-slate-100" };
+  }
+}
+
+function getRoleIcon(role: Role) {
+  switch (role) {
+    case "Administrador":
+      return <Shield className="h-3 w-3" />;
+    case "Supervisor":
+      return <Eye className="h-3 w-3" />;
+    case "Consultor":
+      return <User className="h-3 w-3" />;
+  }
+}
 
 function formatBRL(value: number) {
   return value.toLocaleString("pt-BR", {
@@ -59,14 +118,30 @@ function formatBRL(value: number) {
   });
 }
 
+// ===== MAIN COMPONENT =====
 function AdminDashboard() {
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"dashboard" | "history" | "allowlist">("dashboard");
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
-  // ===== States para Aba 2 (Histórico de Simulações) =====
+  // ===== USERS (mock data) =====
+  const [users, setUsers] = useState<UserAccess[]>([
+    { id: "usr-1", email: "admin.sergio@gavresorts.com.br", role: "Administrador", active: true },
+    { id: "usr-2", email: "patricia.gestora@gavresorts.com.br", role: "Supervisor", active: true },
+    { id: "usr-3", email: "carlos.silva@gavresorts.com.br", role: "Consultor", active: true },
+    { id: "usr-4", email: "mariana.costa@gavresorts.com.br", role: "Consultor", active: true },
+    { id: "usr-5", email: "junior.vendas@gavresorts.com.br", role: "Consultor", active: false },
+  ]);
+
+  // ===== CURRENT USER (simulated login) =====
+  const [currentUserId, setCurrentUserId] = useState("usr-1");
+  const currentUser = users.find((u) => u.id === currentUserId)!;
+
+  // ===== SIMULATIONS =====
   const [historySearch, setHistorySearch] = useState("");
   const [selectedRejection, setSelectedRejection] = useState<Simulation | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<Simulation | null>(null);
   const [simulations, setSimulations] = useState<Simulation[]>([
     {
       id: "sim-1",
@@ -74,8 +149,8 @@ function AdminDashboard() {
       consultant: "Carlos Silva",
       resort: "Exclusive GAV Resort",
       product: "100.000 pontos",
-      value: 17000.00,
-      status: "Aceita"
+      value: 17000.0,
+      status: "Aceita",
     },
     {
       id: "sim-2",
@@ -83,9 +158,10 @@ function AdminDashboard() {
       consultant: "Mariana Costa",
       resort: "Park GAV Resort",
       product: "80.000 pontos",
-      value: 13600.00,
+      value: 13600.0,
       status: "Não Aceita",
-      rejectionReason: "O cliente achou as parcelas mensais de reaproveitamento muito elevadas para o orçamento doméstico atual, optando por renegociar o saldo em diárias diretas no balcão de atendimento."
+      rejectionReason:
+        "O cliente achou as parcelas mensais de reaproveitamento muito elevadas para o orçamento doméstico atual, optando por renegociar o saldo em diárias diretas no balcão de atendimento.",
     },
     {
       id: "sim-3",
@@ -93,8 +169,8 @@ function AdminDashboard() {
       consultant: "Roberto Souza",
       resort: "Porto Alto Resort",
       product: "150.000 pontos",
-      value: 25500.00,
-      status: "Aceita"
+      value: 25500.0,
+      status: "Aceita",
     },
     {
       id: "sim-4",
@@ -102,9 +178,10 @@ function AdminDashboard() {
       consultant: "Luciana Dias",
       resort: "Premium GAV Resort",
       product: "60.000 pontos",
-      value: 10200.00,
+      value: 10200.0,
       status: "Não Aceita",
-      rejectionReason: "Cliente viaja poucas vezes por ano e prefere manter flexibilidade de reservas pontuais no mercado livre em vez de se fidelizar ao sistema de pontos por 5 anos."
+      rejectionReason:
+        "Cliente viaja poucas vezes por ano e prefere manter flexibilidade de reservas pontuais no mercado livre em vez de se fidelizar ao sistema de pontos por 5 anos.",
     },
     {
       id: "sim-5",
@@ -112,40 +189,36 @@ function AdminDashboard() {
       consultant: "Fernando Lima",
       resort: "Pyrenéus Residence",
       product: "90.000 pontos",
-      value: 15300.00,
-      status: "Aceita"
-    }
+      value: 15300.0,
+      status: "Aceita",
+    },
   ]);
 
-  // ===== States para Aba 3 (Acessos Autorizados) =====
-  const [users, setUsers] = useState<UserAccess[]>([
-    { id: "usr-1", email: "admin.sergio@gavresorts.com.br", role: "Administrador", active: true },
-    { id: "usr-2", email: "carlos.silva@gavresorts.com.br", role: "Consultor", active: true },
-    { id: "usr-3", email: "mariana.costa@gavresorts.com.br", role: "Consultor", active: true },
-    { id: "usr-4", email: "junior.vendas@gavresorts.com.br", role: "Consultor", active: false }
-  ]);
-
+  // ===== ADD USER MODAL =====
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [newEmail, setNewEmail] = useState("");
-  const [newRole, setNewRole] = useState<"Consultor" | "Administrador">("Consultor");
+  const [newRole, setNewRole] = useState<Role>("Consultor");
   const [newActive, setNewActive] = useState(true);
 
-  // ===== Handlers Aba 3 =====
+  // ===== HANDLERS =====
   const handleToggleUserActive = (id: string) => {
-    setUsers((prev) =>
-      prev.map((user) => (user.id === id ? { ...user, active: !user.active } : user))
-    );
+    const target = users.find((u) => u.id === id);
+    if (!target || !canToggleUser(currentUser.role, target, currentUserId)) return;
+    setUsers((prev) => prev.map((user) => (user.id === id ? { ...user, active: !user.active } : user)));
   };
 
   const handleAddUser = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newEmail.trim()) return;
+    if (!newEmail.trim() || !canCreateUsers(currentUser.role)) return;
+
+    const creatableRoles = getCreatableRoles(currentUser.role);
+    const roleToAssign = creatableRoles.includes(newRole) ? newRole : creatableRoles[0];
 
     const newUser: UserAccess = {
       id: `usr-${Date.now()}`,
       email: newEmail.trim().toLowerCase(),
-      role: newRole,
-      active: newActive
+      role: roleToAssign,
+      active: newActive,
     };
 
     setUsers((prev) => [...prev, newUser]);
@@ -155,7 +228,18 @@ function AdminDashboard() {
     setIsAddUserOpen(false);
   };
 
-  // ===== Filtragem de Simulações =====
+  const handleDeleteSimulation = (id: string) => {
+    if (!canDeleteSimulation(currentUser.role)) return;
+    setSimulations((prev) => prev.filter((sim) => sim.id !== id));
+    setDeleteConfirm(null);
+  };
+
+  const handleSwitchProfile = (userId: string) => {
+    setCurrentUserId(userId);
+    setProfileMenuOpen(false);
+  };
+
+  // ===== FILTERED SIMULATIONS =====
   const filteredSimulations = useMemo(() => {
     return simulations.filter((sim) => {
       const term = historySearch.toLowerCase();
@@ -172,6 +256,8 @@ function AdminDashboard() {
     { id: "history", label: "Histórico de Simulações", icon: History },
     { id: "allowlist", label: "Acessos Autorizados", icon: UserCheck },
   ] as const;
+
+  const roleStyles = getRoleBadgeStyles(currentUser.role);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-50 text-slate-800 font-sans">
@@ -279,17 +365,76 @@ function AdminDashboard() {
               <Menu className="h-6 w-6" />
             </button>
             <h1 className="text-xl font-bold text-slate-800 capitalize">
-              {activeTab === "allowlist" ? "Acessos Autorizados" : activeTab === "history" ? "Histórico de Simulações" : "Dashboard Geral"}
+              {activeTab === "allowlist"
+                ? "Acessos Autorizados"
+                : activeTab === "history"
+                  ? "Histórico de Simulações"
+                  : "Dashboard Geral"}
             </h1>
           </div>
-          <div className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200">
-            Ambiente Administrativo
+
+          {/* PROFILE SELECTOR */}
+          <div className="relative">
+            <button
+              onClick={() => setProfileMenuOpen(!profileMenuOpen)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-xs font-semibold cursor-pointer ${roleStyles.bg} ${roleStyles.text} ${roleStyles.border} hover:shadow-md`}
+            >
+              {getRoleIcon(currentUser.role)}
+              <span className="hidden sm:inline max-w-[140px] truncate">{currentUser.email.split("@")[0]}</span>
+              <span className="sm:hidden">{currentUser.role.slice(0, 3)}</span>
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${profileMenuOpen ? "rotate-180" : ""}`} />
+            </button>
+
+            {/* Profile dropdown */}
+            {profileMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setProfileMenuOpen(false)} />
+                <div className="absolute right-0 top-full mt-2 z-50 w-72 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                  <div className="px-4 py-3 bg-slate-50 border-b border-slate-100">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      Simular Perfil de Acesso
+                    </p>
+                  </div>
+                  <div className="py-1">
+                    {users
+                      .filter((u) => u.active)
+                      .map((user) => {
+                        const styles = getRoleBadgeStyles(user.role);
+                        const isSelected = user.id === currentUserId;
+                        return (
+                          <button
+                            key={user.id}
+                            onClick={() => handleSwitchProfile(user.id)}
+                            className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                              isSelected ? "bg-blue-50" : "hover:bg-slate-50"
+                            }`}
+                          >
+                            <div
+                              className={`h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 ${styles.bg} ${styles.text}`}
+                            >
+                              {getRoleIcon(user.role)}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-semibold text-slate-800 truncate">{user.email}</p>
+                              <p className={`text-[10px] font-bold ${styles.text}`}>{user.role}</p>
+                            </div>
+                            {isSelected && (
+                              <span className="text-[10px] font-bold text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">
+                                Ativo
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </header>
 
         {/* PAGE CONTENT */}
         <div className="p-6 md:p-8 flex-1 max-w-7xl w-full mx-auto space-y-6">
-
           {/* ==================== TAB 1: DASHBOARD ==================== */}
           {activeTab === "dashboard" && (
             <div className="space-y-6 animate-in fade-in duration-200">
@@ -298,7 +443,9 @@ function AdminDashboard() {
                 {/* CARD 1 */}
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow flex items-center justify-between">
                   <div>
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Total de Simulações</span>
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
+                      Total de Simulações
+                    </span>
                     <span className="text-3xl font-bold text-slate-800 mt-2 block">142</span>
                     <span className="text-xs text-emerald-600 font-semibold mt-1 inline-flex items-center gap-1">
                       <TrendingUp className="h-3 w-3" /> +12% vs último mês
@@ -312,7 +459,9 @@ function AdminDashboard() {
                 {/* CARD 2 */}
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow flex items-center justify-between">
                   <div>
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Taxa de Conversão</span>
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
+                      Taxa de Conversão
+                    </span>
                     <span className="text-3xl font-bold text-slate-800 mt-2 block">38%</span>
                     <span className="text-xs text-slate-500 font-medium mt-1 block">Meta comercial: 40%</span>
                   </div>
@@ -324,7 +473,9 @@ function AdminDashboard() {
                 {/* CARD 3 */}
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow flex items-center justify-between sm:col-span-2 lg:col-span-1">
                   <div>
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Valor Total Retido</span>
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
+                      Valor Total Retido
+                    </span>
                     <span className="text-3xl font-bold text-slate-800 mt-2 block">R$ 452.000,00</span>
                     <span className="text-xs text-blue-600 font-semibold mt-1 inline-flex items-center gap-1">
                       Saldo reaproveitado ativo
@@ -343,12 +494,19 @@ function AdminDashboard() {
                 </div>
                 <h3 className="text-base font-bold text-slate-700">Painel de Análise Visual</h3>
                 <p className="text-sm text-slate-500 max-w-sm mt-1">
-                  Este espaço está reservado para a futura integração de gráficos dinâmicos de performance (ex: Recharts, ChartJS), detalhando as taxas de sucesso por empreendimento.
+                  Este espaço está reservado para a futura integração de gráficos dinâmicos de performance (ex:
+                  Recharts, ChartJS), detalhando as taxas de sucesso por empreendimento.
                 </p>
                 <div className="mt-6 flex gap-2">
-                  <span className="px-3 py-1 bg-slate-100 rounded-md border border-slate-200 text-xs font-semibold text-slate-500">Volume diário</span>
-                  <span className="px-3 py-1 bg-slate-100 rounded-md border border-slate-200 text-xs font-semibold text-slate-500">Metas por resort</span>
-                  <span className="px-3 py-1 bg-slate-100 rounded-md border border-slate-200 text-xs font-semibold text-slate-500">Proporção de objeções</span>
+                  <span className="px-3 py-1 bg-slate-100 rounded-md border border-slate-200 text-xs font-semibold text-slate-500">
+                    Volume diário
+                  </span>
+                  <span className="px-3 py-1 bg-slate-100 rounded-md border border-slate-200 text-xs font-semibold text-slate-500">
+                    Metas por resort
+                  </span>
+                  <span className="px-3 py-1 bg-slate-100 rounded-md border border-slate-200 text-xs font-semibold text-slate-500">
+                    Proporção de objeções
+                  </span>
                 </div>
               </div>
             </div>
@@ -357,6 +515,19 @@ function AdminDashboard() {
           {/* ==================== TAB 2: HISTÓRICO DE SIMULAÇÕES ==================== */}
           {activeTab === "history" && (
             <div className="space-y-6 animate-in fade-in duration-200">
+              {/* READ-ONLY BANNER FOR CONSULTOR */}
+              {currentUser.role === "Consultor" && (
+                <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 p-4 rounded-xl text-amber-800">
+                  <FileText className="h-5 w-5 flex-shrink-0 text-amber-600" />
+                  <div>
+                    <p className="text-sm font-bold">Histórico protegido — somente leitura</p>
+                    <p className="text-xs text-amber-700 mt-0.5">
+                      Os registros de simulações servem como base de dados para oportunidades de argumentação comercial.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* FILTERS PANEL */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                 <div className="relative flex-1">
@@ -385,13 +556,25 @@ function AdminDashboard() {
                   <table className="w-full text-left border-collapse text-sm">
                     <thead>
                       <tr className="bg-slate-50/75 border-b border-slate-200">
-                        <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[11px]">Data / Hora</th>
-                        <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[11px]">Consultor</th>
-                        <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[11px]">Empreendimento</th>
+                        <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[11px]">
+                          Data / Hora
+                        </th>
+                        <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[11px]">
+                          Consultor
+                        </th>
+                        <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[11px]">
+                          Empreendimento
+                        </th>
                         <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[11px]">Produto</th>
-                        <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[11px] text-right">Valor Reaproveitado</th>
-                        <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[11px] text-center">Status</th>
-                        <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[11px] text-center">Ações</th>
+                        <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[11px] text-right">
+                          Valor Reaproveitado
+                        </th>
+                        <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[11px] text-center">
+                          Status
+                        </th>
+                        <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[11px] text-center">
+                          Ações
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -419,18 +602,31 @@ function AdminDashboard() {
                               )}
                             </td>
                             <td className="p-4 text-center">
-                              {sim.status === "Não Aceita" ? (
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedRejection(sim)}
-                                  className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-slate-100 hover:bg-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 border border-slate-200 transition-colors"
-                                >
-                                  <Eye className="h-3.5 w-3.5" />
-                                  Ver Motivo
-                                </button>
-                              ) : (
-                                <span className="text-xs text-slate-400 italic font-medium">—</span>
-                              )}
+                              <div className="flex items-center justify-center gap-2">
+                                {sim.status === "Não Aceita" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedRejection(sim)}
+                                    className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-slate-100 hover:bg-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 border border-slate-200 transition-colors"
+                                  >
+                                    <Eye className="h-3.5 w-3.5" />
+                                    Ver Motivo
+                                  </button>
+                                )}
+                                {canDeleteSimulation(currentUser.role) && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setDeleteConfirm(sim)}
+                                    className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-rose-50 hover:bg-rose-100 px-2.5 py-1.5 text-xs font-semibold text-rose-600 border border-rose-200 transition-colors"
+                                    title="Excluir simulação"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                                {sim.status === "Aceita" && !canDeleteSimulation(currentUser.role) && (
+                                  <span className="text-xs text-slate-400 italic font-medium">—</span>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))
@@ -451,17 +647,36 @@ function AdminDashboard() {
           {/* ==================== TAB 3: ACESSOS AUTORIZADOS ==================== */}
           {activeTab === "allowlist" && (
             <div className="space-y-6 animate-in fade-in duration-200">
+              {/* READ-ONLY BANNER FOR CONSULTOR */}
+              {currentUser.role === "Consultor" && (
+                <div className="flex items-center gap-3 bg-slate-100 border border-slate-200 p-4 rounded-xl text-slate-700">
+                  <Lock className="h-5 w-5 flex-shrink-0 text-slate-500" />
+                  <div>
+                    <p className="text-sm font-bold">Acesso somente leitura</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Seu perfil de Consultor permite apenas a visualização dos acessos autorizados.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* TOP HEADER BUTTON */}
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => setIsAddUserOpen(true)}
-                  className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-[#002B5C] hover:opacity-90 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition-opacity"
-                >
-                  <UserPlus className="h-4 w-4" />
-                  Adicionar Usuário
-                </button>
-              </div>
+              {canCreateUsers(currentUser.role) && (
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const creatableRoles = getCreatableRoles(currentUser.role);
+                      setNewRole(creatableRoles[0]);
+                      setIsAddUserOpen(true);
+                    }}
+                    className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-[#002B5C] hover:opacity-90 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition-opacity"
+                  >
+                    <UserPlus className="h-4 w-4" />
+                    Adicionar Usuário
+                  </button>
+                </div>
+              )}
 
               {/* ACCESS MANAGEMENT TABLE */}
               <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
@@ -469,74 +684,96 @@ function AdminDashboard() {
                   <table className="w-full text-left border-collapse text-sm">
                     <thead>
                       <tr className="bg-slate-50/75 border-b border-slate-200">
-                        <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[11px]">E-mail do Usuário</th>
-                        <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[11px]">Nível de Acesso</th>
-                        <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[11px] text-center">Status</th>
+                        <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[11px]">
+                          E-mail do Usuário
+                        </th>
+                        <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[11px]">
+                          Nível de Acesso
+                        </th>
+                        <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[11px] text-center">
+                          Status
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {users.map((user) => (
-                        <tr key={user.id} className="hover:bg-slate-50/50 transition">
-                          <td className="p-4 font-semibold text-slate-800 flex items-center gap-2">
-                            <Mail className="h-4 w-4 text-slate-400" />
-                            {user.email}
-                          </td>
-                          <td className="p-4">
-                            {user.role === "Administrador" ? (
-                              <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 border border-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">
-                                <Shield className="h-3 w-3" />
-                                Administrador
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 rounded-md bg-slate-50 border border-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
-                                Consultor
-                              </span>
-                            )}
-                          </td>
-                          <td className="p-4">
-                            <div className="flex items-center justify-center gap-3">
-                              <span className={`text-xs font-semibold ${user.active ? "text-emerald-600" : "text-slate-400"}`}>
-                                {user.active ? "Ativo" : "Inativo"}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => handleToggleUserActive(user.id)}
-                                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 ${
-                                  user.active ? "bg-emerald-500" : "bg-slate-200"
-                                }`}
+                      {users.map((user) => {
+                        const canToggle = canToggleUser(currentUser.role, user, currentUserId);
+                        const badgeStyles = getRoleBadgeStyles(user.role);
+
+                        return (
+                          <tr key={user.id} className="hover:bg-slate-50/50 transition">
+                            <td className="p-4 font-semibold text-slate-800 flex items-center gap-2">
+                              <Mail className="h-4 w-4 text-slate-400" />
+                              {user.email}
+                            </td>
+                            <td className="p-4">
+                              <span
+                                className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-semibold ${badgeStyles.bg} ${badgeStyles.text} ${badgeStyles.border}`}
                               >
+                                {getRoleIcon(user.role)}
+                                {user.role}
+                              </span>
+                            </td>
+                            <td className="p-4">
+                              <div className="flex items-center justify-center gap-3">
                                 <span
-                                  aria-hidden="true"
-                                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                                    user.active ? "translate-x-5" : "translate-x-0"
-                                  }`}
-                                />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
+                                  className={`text-xs font-semibold ${user.active ? "text-emerald-600" : "text-slate-400"}`}
+                                >
+                                  {user.active ? "Ativo" : "Inativo"}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => canToggle && handleToggleUserActive(user.id)}
+                                  disabled={!canToggle}
+                                  title={
+                                    !canToggle
+                                      ? user.id === currentUserId
+                                        ? "Você não pode alterar seu próprio status"
+                                        : `Sem permissão para alterar ${user.role}`
+                                      : `Clique para ${user.active ? "desativar" : "ativar"}`
+                                  }
+                                  className={`relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 ${
+                                    !canToggle
+                                      ? "opacity-40 cursor-not-allowed"
+                                      : "cursor-pointer"
+                                  } ${user.active ? "bg-emerald-500" : "bg-slate-200"}`}
+                                >
+                                  <span
+                                    aria-hidden="true"
+                                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                      user.active ? "translate-x-5" : "translate-x-0"
+                                    }`}
+                                  />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
               </div>
             </div>
           )}
-
         </div>
       </main>
 
       {/* ==================== MODAL: MOTIVO DA RECUSA (ABA 2) ==================== */}
       {selectedRejection && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onClick={() => setSelectedRejection(null)} />
+          <div
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"
+            onClick={() => setSelectedRejection(null)}
+          />
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-slate-50">
               <div>
                 <h3 className="font-bold text-slate-800">Motivo da Recusa</h3>
                 <p className="text-xs text-slate-500 mt-1">
-                  Consultor: <strong className="text-slate-700">{selectedRejection.consultant}</strong> · {selectedRejection.date}
+                  Consultor: <strong className="text-slate-700">{selectedRejection.consultant}</strong> ·{" "}
+                  {selectedRejection.date}
                 </p>
               </div>
               <button
@@ -575,10 +812,55 @@ function AdminDashboard() {
         </div>
       )}
 
+      {/* ==================== MODAL: CONFIRMAR EXCLUSÃO (ABA 2) ==================== */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"
+            onClick={() => setDeleteConfirm(null)}
+          />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 text-center space-y-4">
+              <div className="mx-auto h-14 w-14 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center">
+                <Trash2 className="h-7 w-7" />
+              </div>
+              <div>
+                <h3 className="font-bold text-lg text-slate-800">Excluir Simulação?</h3>
+                <p className="text-sm text-slate-500 mt-2">
+                  Tem certeza que deseja excluir o registro de{" "}
+                  <strong className="text-slate-700">{deleteConfirm.consultant}</strong> em{" "}
+                  <strong className="text-slate-700">{deleteConfirm.resort}</strong>?
+                </p>
+                <p className="text-xs text-rose-500 font-semibold mt-2">Esta ação não pode ser desfeita.</p>
+              </div>
+            </div>
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirm(null)}
+                className="rounded-lg border border-slate-200 bg-white hover:bg-slate-50 px-5 py-2 text-xs font-semibold text-slate-700 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteSimulation(deleteConfirm.id)}
+                className="rounded-lg bg-rose-600 hover:bg-rose-700 px-5 py-2 text-xs font-semibold text-white shadow-sm transition"
+              >
+                Excluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ==================== MODAL: ADICIONAR USUÁRIO (ABA 3) ==================== */}
       {isAddUserOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onClick={() => setIsAddUserOpen(false)} />
+          <div
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"
+            onClick={() => setIsAddUserOpen(false)}
+          />
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-slate-50">
@@ -598,7 +880,10 @@ function AdminDashboard() {
               <div className="p-6 space-y-4">
                 {/* Email field */}
                 <div>
-                  <label htmlFor="new-email" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                  <label
+                    htmlFor="new-email"
+                    className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2"
+                  >
                     E-mail do Usuário
                   </label>
                   <input
@@ -612,39 +897,45 @@ function AdminDashboard() {
                   />
                 </div>
 
-                {/* Role field */}
+                {/* Role field - shows only roles the current user can create */}
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
                     Nível de Acesso
                   </label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <label className={`flex items-center justify-center gap-2 rounded-lg border p-3 text-xs font-bold cursor-pointer transition ${
-                      newRole === "Consultor" ? "border-[#002B5C] bg-blue-50/50 text-[#002B5C]" : "border-slate-200 hover:bg-slate-50"
-                    }`}>
-                      <input
-                        type="radio"
-                        name="role"
-                        value="Consultor"
-                        checked={newRole === "Consultor"}
-                        onChange={() => setNewRole("Consultor")}
-                        className="sr-only"
-                      />
-                      Consultor
-                    </label>
-                    <label className={`flex items-center justify-center gap-2 rounded-lg border p-3 text-xs font-bold cursor-pointer transition ${
-                      newRole === "Administrador" ? "border-[#002B5C] bg-blue-50/50 text-[#002B5C]" : "border-slate-200 hover:bg-slate-50"
-                    }`}>
-                      <input
-                        type="radio"
-                        name="role"
-                        value="Administrador"
-                        checked={newRole === "Administrador"}
-                        onChange={() => setNewRole("Administrador")}
-                        className="sr-only"
-                      />
-                      Administrador
-                    </label>
+                  <div
+                    className={`grid gap-3 ${getCreatableRoles(currentUser.role).length >= 3 ? "grid-cols-3" : getCreatableRoles(currentUser.role).length === 2 ? "grid-cols-2" : "grid-cols-1"}`}
+                  >
+                    {getCreatableRoles(currentUser.role).map((role) => {
+                      const styles = getRoleBadgeStyles(role);
+                      return (
+                        <label
+                          key={role}
+                          className={`flex items-center justify-center gap-2 rounded-lg border p-3 text-xs font-bold cursor-pointer transition ${
+                            newRole === role
+                              ? `${styles.border} ${styles.bg} ${styles.text} ring-2 ring-offset-1 ring-blue-200`
+                              : "border-slate-200 hover:bg-slate-50"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="role"
+                            value={role}
+                            checked={newRole === role}
+                            onChange={() => setNewRole(role)}
+                            className="sr-only"
+                          />
+                          {getRoleIcon(role)}
+                          {role}
+                        </label>
+                      );
+                    })}
                   </div>
+                  {currentUser.role === "Supervisor" && (
+                    <p className="text-[10px] text-amber-600 font-semibold mt-2 flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" />
+                      Supervisores só podem criar Consultores
+                    </p>
+                  )}
                 </div>
 
                 {/* Active toggle */}
