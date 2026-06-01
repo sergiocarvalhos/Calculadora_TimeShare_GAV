@@ -7,6 +7,7 @@ import {
   Plus,
   Search,
   Eye,
+  EyeOff,
   X,
   TrendingUp,
   DollarSign,
@@ -23,6 +24,7 @@ import {
   ChevronDown,
   User,
   Lock,
+  LogOut,
   FileText,
   Settings,
   Save,
@@ -126,12 +128,42 @@ function formatBRL(value: number) {
   });
 }
 
+// ===== ADMIN AUTH HELPERS =====
+const ADMIN_SESSION_KEY = "timeshare:admin_session";
+const SESSION_DURATION_MS = 8 * 60 * 60 * 1000; // 8 hours
+
+function isAdminSessionValid(): boolean {
+  try {
+    const raw = localStorage.getItem(ADMIN_SESSION_KEY);
+    if (!raw) return false;
+    const { ts } = JSON.parse(raw) as { ts: number };
+    return Date.now() - ts < SESSION_DURATION_MS;
+  } catch {
+    return false;
+  }
+}
+
+function createAdminSession(): void {
+  localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ ts: Date.now() }));
+}
+
+function clearAdminSession(): void {
+  localStorage.removeItem(ADMIN_SESSION_KEY);
+}
+
 // ===== MAIN COMPONENT =====
 function AdminDashboard() {
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"dashboard" | "history" | "allowlist" | "parameters">("dashboard");
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+
+  // ===== AUTH STATE =====
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(isAdminSessionValid);
+  const [loginPassword, setLoginPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [loginError, setLoginError] = useState(false);
+  const [loginShake, setLoginShake] = useState(false);
 
   // ===== CONFIG STATE =====
   const [config, setConfig] = useState<AppConfig>(getConfig);
@@ -230,6 +262,36 @@ function AdminDashboard() {
   const [newEmail, setNewEmail] = useState("");
   const [newRole, setNewRole] = useState<Role>("Consultor");
   const [newActive, setNewActive] = useState(true);
+
+  // ===== AUTH HANDLERS =====
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    const expected = import.meta.env.VITE_ADMIN_PASSWORD as string | undefined;
+    if (!expected) {
+      // No env var set — allow access so admin can still configure during development
+      createAdminSession();
+      setIsAuthenticated(true);
+      return;
+    }
+    if (loginPassword === expected) {
+      createAdminSession();
+      setIsAuthenticated(true);
+      setLoginError(false);
+      setLoginPassword("");
+    } else {
+      setLoginError(true);
+      setLoginPassword("");
+      setLoginShake(true);
+      setTimeout(() => setLoginShake(false), 600);
+    }
+  };
+
+  const handleLogout = () => {
+    clearAdminSession();
+    setIsAuthenticated(false);
+    setLoginPassword("");
+    setLoginError(false);
+  };
 
   // ===== HANDLERS =====
   const handleToggleUserActive = (id: string) => {
@@ -396,6 +458,107 @@ function AdminDashboard() {
   ] as const;
 
   const roleStyles = getRoleBadgeStyles(currentUser.role);
+
+  // ===== LOGIN SCREEN =====
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen w-screen flex items-center justify-center bg-gradient-to-br from-[#001f42] via-[#002B5C] to-[#003d80] p-4">
+        {/* Background pattern */}
+        <div className="absolute inset-0 opacity-10" style={{ backgroundImage: "radial-gradient(circle at 25% 25%, #3b82f6 0%, transparent 50%), radial-gradient(circle at 75% 75%, #60a5fa 0%, transparent 50%)" }} />
+
+        <div className="relative w-full max-w-md">
+          {/* Card */}
+          <div
+            className={`bg-white/95 backdrop-blur-sm rounded-3xl shadow-2xl overflow-hidden transition-transform duration-300 ${
+              loginShake ? "animate-[shake_0.4s_ease-in-out]" : ""
+            }`}
+            style={loginShake ? { animation: "shake 0.4s ease-in-out" } : {}}
+          >
+            {/* Header */}
+            <div className="bg-gradient-to-r from-[#002B5C] to-[#003d80] px-8 pt-10 pb-8 text-center">
+              <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-white/15 backdrop-blur mb-4">
+                <Shield className="h-8 w-8 text-white" />
+              </div>
+              <h1 className="text-xl font-bold text-white">Painel Administrativo</h1>
+              <p className="text-blue-200 text-sm mt-1">GAV Resorts — Time Share</p>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleLogin} className="px-8 py-8 space-y-5">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                  Senha de Acesso
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={loginPassword}
+                    onChange={(e) => { setLoginPassword(e.target.value); setLoginError(false); }}
+                    placeholder="Digite a senha"
+                    autoFocus
+                    className={`w-full pl-10 pr-12 py-3 rounded-xl border text-sm font-medium outline-none transition-all ${
+                      loginError
+                        ? "border-rose-400 bg-rose-50 text-rose-800 focus:ring-2 focus:ring-rose-200"
+                        : "border-slate-200 bg-slate-50 text-slate-800 focus:bg-white focus:border-[#002B5C] focus:ring-2 focus:ring-blue-100"
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                {loginError && (
+                  <p className="mt-2 text-xs text-rose-600 font-semibold flex items-center gap-1.5 animate-in fade-in duration-200">
+                    <AlertCircle className="h-3.5 w-3.5" />
+                    Senha incorreta. Tente novamente.
+                  </p>
+                )}
+              </div>
+
+              <button
+                type="submit"
+                disabled={!loginPassword.trim()}
+                className="w-full rounded-xl bg-[#002B5C] hover:bg-[#003d80] text-white py-3 text-sm font-bold shadow-lg shadow-blue-900/20 transition-all hover:shadow-xl hover:shadow-blue-900/30 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
+              >
+                Acessar Painel
+              </button>
+            </form>
+
+            <div className="px-8 pb-8 text-center">
+              <p className="text-[11px] text-slate-400">
+                Acesso restrito a colaboradores autorizados da GAV Resorts.
+              </p>
+            </div>
+          </div>
+
+          {/* Back link */}
+          <div className="text-center mt-6">
+            <a href="/" className="text-blue-200 hover:text-white text-xs font-medium transition-colors inline-flex items-center gap-1.5">
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Voltar à Calculadora
+            </a>
+          </div>
+        </div>
+
+        <style>{`
+          @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            15% { transform: translateX(-8px); }
+            30% { transform: translateX(8px); }
+            45% { transform: translateX(-6px); }
+            60% { transform: translateX(6px); }
+            75% { transform: translateX(-3px); }
+            90% { transform: translateX(3px); }
+          }
+        `}</style>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-50 text-slate-800 font-sans">
@@ -571,6 +734,16 @@ function AdminDashboard() {
               </>
             )}
           </div>
+
+          {/* LOGOUT BUTTON */}
+          <button
+            onClick={handleLogout}
+            title="Sair do painel"
+            className="ml-2 flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 text-slate-500 text-xs font-semibold transition-all"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Sair</span>
+          </button>
         </header>
 
         {/* PAGE CONTENT */}
