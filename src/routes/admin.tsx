@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useTransition } from "react";
+import { validateAdminPassword } from "../lib/admin-auth";
 import {
   LayoutDashboard,
   History,
@@ -164,6 +165,7 @@ function AdminDashboard() {
   const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState(false);
   const [loginShake, setLoginShake] = useState(false);
+  const [isPending, startTransition] = useTransition();
 
   // ===== CONFIG STATE =====
   const [config, setConfig] = useState<AppConfig>(getConfig);
@@ -266,24 +268,28 @@ function AdminDashboard() {
   // ===== AUTH HANDLERS =====
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    const expected = import.meta.env.VITE_ADMIN_PASSWORD as string | undefined;
-    if (!expected) {
-      // No env var set — allow access so admin can still configure during development
-      createAdminSession();
-      setIsAuthenticated(true);
-      return;
-    }
-    if (loginPassword === expected) {
-      createAdminSession();
-      setIsAuthenticated(true);
-      setLoginError(false);
-      setLoginPassword("");
-    } else {
-      setLoginError(true);
-      setLoginPassword("");
-      setLoginShake(true);
-      setTimeout(() => setLoginShake(false), 600);
-    }
+    if (!loginPassword.trim() || isPending) return;
+    startTransition(async () => {
+      try {
+        const result = await validateAdminPassword({ data: { password: loginPassword } });
+        if (result.ok) {
+          createAdminSession();
+          setIsAuthenticated(true);
+          setLoginError(false);
+          setLoginPassword("");
+        } else {
+          setLoginError(true);
+          setLoginPassword("");
+          setLoginShake(true);
+          setTimeout(() => setLoginShake(false), 600);
+        }
+      } catch {
+        setLoginError(true);
+        setLoginPassword("");
+        setLoginShake(true);
+        setTimeout(() => setLoginShake(false), 600);
+      }
+    });
   };
 
   const handleLogout = () => {
@@ -522,10 +528,17 @@ function AdminDashboard() {
 
               <button
                 type="submit"
-                disabled={!loginPassword.trim()}
-                className="w-full rounded-xl bg-[#002B5C] hover:bg-[#003d80] text-white py-3 text-sm font-bold shadow-lg shadow-blue-900/20 transition-all hover:shadow-xl hover:shadow-blue-900/30 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
+                disabled={!loginPassword.trim() || isPending}
+                className="w-full rounded-xl bg-[#002B5C] hover:bg-[#003d80] text-white py-3 text-sm font-bold shadow-lg shadow-blue-900/20 transition-all hover:shadow-xl hover:shadow-blue-900/30 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] flex items-center justify-center gap-2"
               >
-                Acessar Painel
+                {isPending ? (
+                  <>
+                    <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                    Verificando...
+                  </>
+                ) : (
+                  "Acessar Painel"
+                )}
               </button>
             </form>
 
