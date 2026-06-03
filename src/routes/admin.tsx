@@ -153,7 +153,7 @@ function clearAdminSession(): void {
 }
 
 // ===== MAIN COMPONENT =====
-function AdminDashboard() {
+function AdminDashboardInner() {
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"dashboard" | "history" | "allowlist" | "parameters">("dashboard");
@@ -1737,4 +1737,51 @@ function AdminDashboard() {
       )}
     </div>
   );
+}
+
+// ===== SSR-SAFE WRAPPER =====
+// AdminDashboardInner accesses localStorage, server functions, and browser APIs.
+// During Cloudflare Worker SSR these are unavailable and crash the Worker.
+// This wrapper defers all rendering to the client after first mount.
+function AdminDashboard() {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background:
+            "linear-gradient(135deg, #001f42 0%, #002B5C 60%, #004080 100%)",
+        }}
+      >
+        <div style={{ textAlign: "center", color: "white" }}>
+          <div
+            style={{
+              width: 36,
+              height: 36,
+              border: "3px solid rgba(255,255,255,0.25)",
+              borderTopColor: "white",
+              borderRadius: "50%",
+              animation: "admin-spin 0.8s linear infinite",
+              margin: "0 auto 14px",
+            }}
+          />
+          <p style={{ fontSize: 13, opacity: 0.65, letterSpacing: "0.02em" }}>
+            Carregando painel...
+          </p>
+        </div>
+        <style>{`@keyframes admin-spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  return <AdminDashboardInner />;
 }
