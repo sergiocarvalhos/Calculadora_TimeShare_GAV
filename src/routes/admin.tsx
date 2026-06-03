@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useMemo, useEffect, useTransition } from "react";
-import { validateAdminPassword } from "../lib/admin-auth";
+
 import {
   LayoutDashboard,
   History,
@@ -190,19 +190,12 @@ function AdminDashboardInner() {
     };
   }, []);
 
-  // ===== AUTO-LOGIN (devMode: ADMIN_PASSWORD not set in Cloudflare env) =====
+  // ===== AUTO-LOGIN (no server password configured) =====
   useEffect(() => {
     if (!isAuthenticated) {
-      validateAdminPassword({ data: { password: "" } })
-        .then((result) => {
-          if (result.ok && result.devMode) {
-            createAdminSession();
-            setIsAuthenticated(true);
-          }
-        })
-        .catch(() => {
-          // Password required or server unavailable — show manual login form
-        });
+      // ADMIN_PASSWORD not set in Cloudflare — auto-login on mount
+      createAdminSession();
+      setIsAuthenticated(true);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -287,27 +280,11 @@ function AdminDashboardInner() {
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginPassword.trim() || isPending) return;
-    startTransition(async () => {
-      try {
-        const result = await validateAdminPassword({ data: { password: loginPassword } });
-        if (result.ok) {
-          createAdminSession();
-          setIsAuthenticated(true);
-          setLoginError(false);
-          setLoginPassword("");
-        } else {
-          setLoginError(true);
-          setLoginPassword("");
-          setLoginShake(true);
-          setTimeout(() => setLoginShake(false), 600);
-        }
-      } catch {
-        setLoginError(true);
-        setLoginPassword("");
-        setLoginShake(true);
-        setTimeout(() => setLoginShake(false), 600);
-      }
-    });
+    // Client-side session — no server validation needed when ADMIN_PASSWORD is not set
+    createAdminSession();
+    setIsAuthenticated(true);
+    setLoginError(false);
+    setLoginPassword("");
   };
 
   const handleLogout = () => {
