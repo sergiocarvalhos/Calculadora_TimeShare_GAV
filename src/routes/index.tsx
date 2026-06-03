@@ -191,7 +191,7 @@ function Index() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">
+    <div className="min-h-screen bg-slate-50">
       <style>{`
         .flip-card { perspective: 1500px; }
         .flip-card-inner {
@@ -211,6 +211,7 @@ function Index() {
           backface-visibility: hidden;
         }
         .flip-back { transform: rotateY(180deg); }
+        .print-only { display: none; }
 
         @media print {
           @page { size: A4 landscape; margin: 8mm; }
@@ -248,12 +249,10 @@ function Index() {
           }
           .print-area > * { margin: 0 !important; }
 
-          /* Header compacto */
-          .print-area header { margin-bottom: 1mm !important; text-align: center !important; }
-          .print-area header > div:first-child { display: none !important; } /* badge "Conversão linear" */
-          .print-area header h1 { font-size: 13pt !important; line-height: 1.05 !important; margin: 0 !important; }
-          .print-area header h1 span { display: inline !important; margin-left: 4pt; }
-          .print-area header p { font-size: 7.5pt !important; margin: 1mm 0 0 0 !important; }
+          /* Header de impressão (print-only substitui o header visual gradiente) */
+          .print-area .print-only { display: block !important; margin-bottom: 1mm !important; text-align: center !important; }
+          .print-area .print-only h1 { font-size: 13pt !important; line-height: 1.05 !important; margin: 0 !important; color: #0f172a !important; }
+          .print-area .print-only p { font-size: 7.5pt !important; margin: 1mm 0 0 0 !important; }
 
           /* Títulos de seção */
           .print-area h2 { font-size: 9pt !important; margin: 0 0 1mm 0 !important; }
@@ -335,51 +334,77 @@ function Index() {
         }
       `}</style>
 
-      <div className="print-area-wrapper mx-auto max-w-6xl px-4 py-10 sm:py-16">
-        {/* Print button */}
-        <div className="no-print mb-4 flex justify-end">
-          <button
-            onClick={handlePrint}
-            disabled={!hasResult || !isEligible}
-            title={(!hasResult || !isEligible) ? "Disponível apenas para propostas elegíveis (≥ 8.000 pts)" : ""}
-            className="inline-flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{ backgroundColor: "#002B5C" }}
-          >
-            <Printer className="h-4 w-4" />
-            Imprimir
-          </button>
-        </div>
-
-        <div className="print-area bg-transparent">
-          {/* Header */}
-          <header className="mb-10 text-center">
-            <div className="mb-4 flex items-center justify-center gap-3 flex-wrap">
-              <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-1.5 text-xs font-medium text-slate-700 shadow-sm">
+      {/* ===== GRADIENT HEADER ===== */}
+      <header
+        className="relative overflow-hidden no-print"
+        style={{
+          background:
+            "linear-gradient(135deg, #001f42 0%, #002B5C 60%, #004080 100%)",
+        }}
+      >
+        <div
+          className="absolute top-0 right-0 w-64 h-64 rounded-full opacity-10"
+          style={{
+            background: "radial-gradient(circle, #60a5fa, transparent 70%)",
+            transform: "translate(30%, -30%)",
+          }}
+        />
+        <div className="relative max-w-6xl mx-auto px-4 py-6 sm:py-8">
+          {/* Top row: pills + print button */}
+          <div className="flex items-center justify-between flex-wrap gap-3 mb-6">
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-xs font-medium text-white">
                 <Sparkles className="h-3.5 w-3.5" />
                 Conversão linear · Reaproveitamento
               </div>
               <Link
                 to="/comparative"
-                className="inline-flex items-center gap-1.5 rounded-full border border-[#002B5C]/20 bg-[#002B5C]/5 hover:bg-[#002B5C] px-4 py-1.5 text-xs font-semibold text-[#002B5C] hover:text-white shadow-sm transition-all group"
+                className="inline-flex items-center gap-1.5 rounded-full border border-white/30 bg-white/10 hover:bg-white/20 px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition-all group"
               >
                 <BarChart3 className="h-3.5 w-3.5" />
                 Simulação de Diária
                 <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
               </Link>
             </div>
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-5xl">
-              Calculadora de Conversão
-              <span className="block" style={{ color: "#002B5C" }}>
-                Time Share
-              </span>
-            </h1>
-            <p className="mx-auto mt-3 max-w-xl text-sm text-slate-600 sm:text-base">
-              Descubra quantos pontos seu saldo gera e quantas diárias você pode utilizar em cada temporada.
-            </p>
-            {exportDate && (
-              <p className="mt-3 text-xs font-medium text-slate-700">{exportDate}</p>
-            )}
-          </header>
+            <button
+              onClick={handlePrint}
+              disabled={!hasResult || !isEligible}
+              title={
+                !hasResult || !isEligible
+                  ? "Disponível apenas para propostas elegíveis (≥ 8.000 pts)"
+                  : ""
+              }
+              className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-white/30 bg-white/10 hover:bg-white/20 px-4 py-2 text-sm font-semibold text-white shadow-md transition disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Printer className="h-4 w-4" />
+              Imprimir
+            </button>
+          </div>
+
+          {/* Icon + title */}
+          <div className="flex items-start gap-4">
+            <div className="h-12 w-12 bg-white/15 rounded-2xl flex items-center justify-center flex-shrink-0 backdrop-blur-sm">
+              <Calculator className="h-6 w-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight">
+                Calculadora de Conversão Time Share
+              </h1>
+              <p className="text-blue-200 text-sm mt-1">
+                Descubra quantos pontos seu saldo gera e quantas diárias você pode utilizar em cada temporada.
+              </p>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div className="print-area-wrapper mx-auto max-w-6xl px-4 py-6 sm:py-10">
+        <div className="print-area bg-transparent">
+          {/* Header visível apenas na impressão */}
+          <div className="print-only mb-4 text-center">
+            <h1 className="text-xl font-bold text-slate-900">Calculadora de Conversão Time Share — GAV Resorts</h1>
+            {exportDate && <p className="mt-1 text-sm text-slate-600">{exportDate}</p>}
+          </div>
 
           {/* Input */}
           <section className="print-hide mx-auto mb-8 max-w-2xl">
