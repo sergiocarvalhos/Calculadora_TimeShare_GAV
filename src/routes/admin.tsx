@@ -190,7 +190,25 @@ function AdminDashboard() {
     };
   }, []);
 
+  // ===== AUTO-LOGIN (devMode: ADMIN_PASSWORD not set in Cloudflare env) =====
+  useEffect(() => {
+    if (!isAuthenticated) {
+      validateAdminPassword({ data: { password: "" } })
+        .then((result) => {
+          if (result.ok && result.devMode) {
+            createAdminSession();
+            setIsAuthenticated(true);
+          }
+        })
+        .catch(() => {
+          // Password required or server unavailable — show manual login form
+        });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ===== USERS (mock data) =====
+
   const [users, setUsers] = useState<UserAccess[]>([
     { id: "usr-1", email: "admin.sergio@gavresorts.com.br", role: "Administrador", active: true },
     { id: "usr-2", email: "patricia.gestora@gavresorts.com.br", role: "Supervisor", active: true },

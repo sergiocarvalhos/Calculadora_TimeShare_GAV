@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import {
   ArrowLeft,
+  Printer,
   Users,
   TrendingUp,
   TrendingDown,
@@ -145,13 +146,24 @@ function ComparativeCalculator() {
           }}
         />
         <div className="relative max-w-4xl mx-auto px-4 py-6 sm:py-8">
-          <Link
-            to="/"
-            className="inline-flex items-center gap-1.5 text-blue-200 hover:text-white text-xs font-medium transition-colors mb-5"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Voltar a Calculadora de Conversao
-          </Link>
+          {/* Top row: back link + print button */}
+          <div className="flex items-center justify-between mb-5">
+            <Link
+              to="/"
+              className="inline-flex items-center gap-1.5 text-blue-200 hover:text-white text-xs font-medium transition-colors"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Voltar à Calculadora de Conversão
+            </Link>
+            <button
+              onClick={() => window.print()}
+              className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-white/30 bg-white/10 hover:bg-white/20 px-4 py-2 text-sm font-semibold text-white shadow-md transition"
+            >
+              <Printer className="h-4 w-4" />
+              Imprimir
+            </button>
+          </div>
+          {/* Title row */}
           <div className="flex items-start gap-4">
             <div className="h-12 w-12 bg-white/15 rounded-2xl flex items-center justify-center flex-shrink-0 backdrop-blur-sm">
               <BarChart3 className="h-6 w-6 text-white" />
@@ -404,16 +416,7 @@ function ComparativeCalculator() {
           </div>
         )}
 
-        {/* BOTTOM NAV */}
-        <div className="flex justify-center pt-2">
-          <Link
-            to="/"
-            className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white hover:bg-slate-50 px-5 py-2.5 text-xs font-semibold text-slate-600 shadow-sm transition-all hover:shadow-md"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Calculadora de Conversao
-          </Link>
-        </div>
+
       </main>
     </div>
   );
