@@ -1,6 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Calculator, Calendar, Users, Sparkles, Info, AlertCircle, AlertTriangle, Printer, RotateCw, History, Check, X, Trash2 } from "lucide-react";
+import { Calculator, Calendar, Users, Sparkles, Info, AlertCircle, AlertTriangle, Printer, RotateCw, History, Check, X, Trash2, BarChart3, ArrowRight } from "lucide-react";
 import { getConfig, CONFIG_UPDATED_EVENT, SEASONS } from "../lib/config-store";
 import type { AppConfig, Resort, Season } from "../lib/config-store";
 
@@ -353,9 +353,19 @@ function Index() {
         <div className="print-area bg-transparent">
           {/* Header */}
           <header className="mb-10 text-center">
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-1.5 text-xs font-medium text-slate-700 shadow-sm">
-              <Sparkles className="h-3.5 w-3.5" />
-              Conversão linear · Gestão de Negócios
+            <div className="mb-4 flex items-center justify-center gap-3 flex-wrap">
+              <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-1.5 text-xs font-medium text-slate-700 shadow-sm">
+                <Sparkles className="h-3.5 w-3.5" />
+                Conversão linear · Reaproveitamento
+              </div>
+              <Link
+                to="/comparative"
+                className="inline-flex items-center gap-1.5 rounded-full border border-[#002B5C]/20 bg-[#002B5C]/5 hover:bg-[#002B5C] px-4 py-1.5 text-xs font-semibold text-[#002B5C] hover:text-white shadow-sm transition-all group"
+              >
+                <BarChart3 className="h-3.5 w-3.5" />
+                Simulação de Diária
+                <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
+              </Link>
             </div>
             <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-5xl">
               Calculadora de Conversão

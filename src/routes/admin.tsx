@@ -396,6 +396,25 @@ function AdminDashboard() {
     }));
   };
 
+  const updateRoomBalcao = (resortId: string, roomId: string, season: Season, value: string) => {
+    const num = value === "" ? undefined : parseFloat(value);
+    setConfig((prev) => ({
+      ...prev,
+      resorts: prev.resorts.map((r) =>
+        r.id === resortId
+          ? {
+              ...r,
+              rooms: r.rooms.map((rm) =>
+                rm.id === roomId
+                  ? { ...rm, balcao: { ...rm.balcao, [season]: isNaN(num as number) ? undefined : num } }
+                  : rm
+              ),
+            }
+          : r
+      ),
+    }));
+  };
+
   const updateRoomCapacity = (resortId: string, roomId: string, value: number) => {
     setConfig((prev) => ({
       ...prev,
@@ -434,6 +453,7 @@ function AdminDashboard() {
       shortType: newRoomShort.trim() || newRoomType.trim().substring(0, 2),
       capacity: newRoomCapacity,
       costs: {},
+      balcao: {},
     };
     setConfig((prev) => ({
       ...prev,
@@ -1243,44 +1263,69 @@ function AdminDashboard() {
                                 </tr>
                               </thead>
                               <tbody>
-                                {resort.rooms.map((room) => (
-                                  <tr key={room.id} className="border-b border-slate-100">
-                                    <td className="py-2 pr-2">
-                                      <span className="text-xs font-semibold text-slate-800">{room.type}</span>
-                                      <span className="text-[10px] text-slate-400 ml-1">({room.shortType})</span>
-                                    </td>
-                                    <td className="py-2 text-center">
-                                      <input
-                                        type="number"
-                                        min="1"
-                                        max="20"
-                                        value={room.capacity}
-                                        onChange={(e) => updateRoomCapacity(resort.id, room.id, parseInt(e.target.value) || 1)}
-                                        className="w-12 bg-slate-50 border border-slate-200 rounded py-1 px-1.5 text-xs text-center font-semibold text-slate-800 outline-none focus:border-[#002B5C] focus:ring-1 focus:ring-blue-100"
-                                      />
-                                    </td>
-                                    {SEASONS.map((season) => (
-                                      <td key={season} className="py-2 px-1 text-center">
+                              {resort.rooms.map((room) => (
+                                  <>
+                                    {/* --- Row 1: Time Share points --- */}
+                                    <tr key={`${room.id}-pts`} className="border-b border-slate-100">
+                                      <td className="py-2 pr-2">
+                                        <span className="text-xs font-semibold text-slate-800">{room.type}</span>
+                                        <span className="text-[10px] text-slate-400 ml-1">({room.shortType})</span>
+                                        <span className="ml-1.5 text-[9px] font-bold text-[#002B5C] bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded">pts</span>
+                                      </td>
+                                      <td className="py-2 text-center">
                                         <input
                                           type="number"
-                                          min="0"
-                                          placeholder="—"
-                                          value={room.costs[season] ?? ""}
-                                          onChange={(e) => updateRoomCost(resort.id, room.id, season, e.target.value)}
-                                          className="w-16 bg-slate-50 border border-slate-200 rounded py-1 px-1.5 text-xs text-center tabular-nums text-slate-700 outline-none focus:border-[#002B5C] focus:ring-1 focus:ring-blue-100 placeholder:text-slate-300"
+                                          min="1"
+                                          max="20"
+                                          value={room.capacity}
+                                          onChange={(e) => updateRoomCapacity(resort.id, room.id, parseInt(e.target.value) || 1)}
+                                          className="w-12 bg-slate-50 border border-slate-200 rounded py-1 px-1.5 text-xs text-center font-semibold text-slate-800 outline-none focus:border-[#002B5C] focus:ring-1 focus:ring-blue-100"
                                         />
                                       </td>
-                                    ))}
-                                    <td className="py-2">
-                                      <button
-                                        onClick={() => handleDeleteRoom(resort.id, room.id)}
-                                        className="p-1 rounded hover:bg-rose-50 text-rose-400 hover:text-rose-600 transition"
-                                        title="Remover unidade"
-                                      >
-                                        <X className="h-3.5 w-3.5" />
-                                      </button>
-                                    </td>
-                                  </tr>
+                                      {SEASONS.map((season) => (
+                                        <td key={season} className="py-2 px-1 text-center">
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            placeholder="—"
+                                            value={room.costs[season] ?? ""}
+                                            onChange={(e) => updateRoomCost(resort.id, room.id, season, e.target.value)}
+                                            className="w-16 bg-slate-50 border border-slate-200 rounded py-1 px-1.5 text-xs text-center tabular-nums text-slate-700 outline-none focus:border-[#002B5C] focus:ring-1 focus:ring-blue-100 placeholder:text-slate-300"
+                                          />
+                                        </td>
+                                      ))}
+                                      <td className="py-2">
+                                        <button
+                                          onClick={() => handleDeleteRoom(resort.id, room.id)}
+                                          className="p-1 rounded hover:bg-rose-50 text-rose-400 hover:text-rose-600 transition"
+                                          title="Remover unidade"
+                                        >
+                                          <X className="h-3.5 w-3.5" />
+                                        </button>
+                                      </td>
+                                    </tr>
+                                    {/* --- Row 2: Balcao tariff --- */}
+                                    <tr key={`${room.id}-balcao`} className="border-b border-dashed border-slate-100">
+                                      <td className="py-1.5 pr-2 pl-1">
+                                        <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded">R$ balcão</span>
+                                      </td>
+                                      <td />
+                                      {SEASONS.map((season) => (
+                                        <td key={season} className="py-1.5 px-1 text-center">
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            step="0.01"
+                                            placeholder="—"
+                                            value={room.balcao?.[season] ?? ""}
+                                            onChange={(e) => updateRoomBalcao(resort.id, room.id, season, e.target.value)}
+                                            className="w-16 bg-emerald-50/50 border border-emerald-100 rounded py-1 px-1.5 text-xs text-center tabular-nums text-emerald-700 outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-100 placeholder:text-slate-300"
+                                          />
+                                        </td>
+                                      ))}
+                                      <td />
+                                    </tr>
+                                  </>
                                 ))}
                               </tbody>
                             </table>
