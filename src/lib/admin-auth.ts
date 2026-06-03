@@ -1,16 +1,15 @@
 import { createServerFn } from "@tanstack/react-start";
-import { getEvent } from "vinxi/http";
 
 /**
  * Server function: validates the submitted password against the
- * ADMIN_PASSWORD secret set in Cloudflare Workers environment.
+ * ADMIN_PASSWORD secret set in the Cloudflare Workers environment.
  *
- * Uses vinxi/http getEvent() to access the h3 event context,
- * where @cloudflare/vite-plugin injects the Cloudflare env bindings
- * via event.context.cloudflare.env
+ * With the nodejs_compat compatibility flag (set in wrangler.jsonc),
+ * Cloudflare Workers exposes all environment variables and secrets
+ * via process.env — no platform-specific imports needed.
  *
  * Returns { ok: true } on match, { ok: false } on mismatch.
- * The secret never leaves the server — safe.
+ * The secret never leaves the server.
  */
 export const validateAdminPassword = createServerFn({ method: "POST" })
   .validator((data: unknown) => {
@@ -24,24 +23,14 @@ export const validateAdminPassword = createServerFn({ method: "POST" })
     return { password: (data as { password: string }).password };
   })
   .handler(async ({ data }) => {
-    try {
-      const event = getEvent();
-      // @cloudflare/vite-plugin injects Cloudflare bindings into event.context.cloudflare
-      const cf = (event.context as Record<string, unknown>)?.cloudflare as
-        | { env?: Record<string, string> }
-        | undefined;
-      const expected: string | undefined = cf?.env?.["ADMIN_PASSWORD"];
+    // process.env is available in Cloudflare Workers with nodejs_compat flag
+    const expected = process.env["ADMIN_PASSWORD"];
 
-      if (!expected) {
-        // No secret configured → allow access (dev / test mode)
-        return { ok: true, devMode: true };
-      }
-
-      return { ok: data.password === expected, devMode: false };
-    } catch {
-      // If Cloudflare context is unavailable (local dev), allow access
+    if (!expected) {
+      // No secret configured → allow access (dev / local mode)
       return { ok: true, devMode: true };
     }
-  });
 
+    return { ok: data.password === expected, devMode: false };
+  });
 
