@@ -61,6 +61,7 @@ function Index() {
   const [masked, setMasked] = useState("");
   const [flipped, setFlipped] = useState<Record<string, boolean>>({});
   const [exportDate, setExportDate] = useState<string | null>(null);
+  const [consultorName, setConsultorName] = useState("");
 
   const balance = useMemo(() => {
     const d = masked.replace(/\D/g, "");
@@ -214,7 +215,7 @@ function Index() {
         .print-only { display: none; }
 
         @media print {
-          @page { size: A4 landscape; margin: 8mm; }
+          @page { size: A4 portrait; margin: 8mm; }
           html, body {
             background: #ffffff !important;
             margin: 0 !important;
@@ -230,62 +231,84 @@ function Index() {
           }
           .no-print, .print-hide { display: none !important; }
 
-          /* Neutralizar wrappers da tela */
+          /* Neutralizar wrappers */
           .print-area-wrapper { max-width: none !important; padding: 0 !important; margin: 0 !important; }
 
-          /* Folha virtual A4 landscape (297x210mm - 8mm margens = 281x194mm) */
+          /* Folha A4 Portrait com 8mm margens: 194mm x 281mm */
           .print-area {
-            width: 281mm !important;
-            max-width: 281mm !important;
-            height: 194mm !important;
-            max-height: 194mm !important;
+            width: 194mm !important;
+            max-width: 194mm !important;
+            height: 281mm !important;
+            max-height: 281mm !important;
             overflow: hidden !important;
-            font-size: 8pt !important;
-            line-height: 1.25 !important;
+            font-size: 7.5pt !important;
+            line-height: 1.2 !important;
             color: #0f172a !important;
             display: flex !important;
             flex-direction: column !important;
-            gap: 2mm !important;
+            gap: 1.5mm !important;
           }
           .print-area > * { margin: 0 !important; }
 
-          /* Header de impressão (print-only substitui o header visual gradiente) */
-          .print-area .print-only { display: block !important; margin-bottom: 1mm !important; text-align: center !important; }
-          .print-area .print-only h1 { font-size: 13pt !important; line-height: 1.05 !important; margin: 0 !important; color: #0f172a !important; }
-          .print-area .print-only p { font-size: 7.5pt !important; margin: 1mm 0 0 0 !important; }
-
-          /* Títulos de seção */
-          .print-area h2 { font-size: 9pt !important; margin: 0 0 1mm 0 !important; }
-          .print-area h3 { font-size: 8.5pt !important; margin: 0 !important; }
-
-          /* Resumo (saldo / pontos) */
-          .print-summary {
-            display: grid !important;
-            grid-template-columns: 1fr 1fr !important;
-            gap: 3mm !important;
-            margin: 0 !important;
+          /* ── OPR HEADER: titulo esquerda / meta direita ── */
+          .print-area .print-only {
+            display: flex !important;
+            align-items: flex-start !important;
+            justify-content: space-between !important;
+            border-bottom: 0.5mm solid #002B5C !important;
+            padding-bottom: 2mm !important;
+            margin-bottom: 0 !important;
+            text-align: left !important;
           }
-          .print-summary > div { padding: 2mm 3mm !important; border-radius: 2mm !important; }
-          .print-summary .text-4xl, .print-summary .text-5xl { font-size: 14pt !important; line-height: 1.1 !important; }
-          .print-summary .text-sm, .print-summary .text-xs { font-size: 7pt !important; }
+          .print-opr-brand h1 {
+            font-size: 11pt !important;
+            font-weight: 700 !important;
+            color: #002B5C !important;
+            margin: 0 !important;
+            line-height: 1.1 !important;
+          }
+          .print-opr-brand p {
+            font-size: 6.5pt !important;
+            color: #64748b !important;
+            margin: 0.5mm 0 0 !important;
+          }
+          .print-opr-meta {
+            text-align: right !important;
+            font-size: 7pt !important;
+            color: #334155 !important;
+            line-height: 1.6 !important;
+            white-space: nowrap !important;
+          }
 
-          /* Grid de resorts: 2 colunas fixas */
-          .print-resorts {
+          /* ── RESUMO (saldo / pontos) ── */
+          .print-summary {
             display: grid !important;
             grid-template-columns: 1fr 1fr !important;
             gap: 2mm !important;
             margin: 0 !important;
           }
-          .print-resorts .resort-info-note {
-            grid-column: 1 / -1 !important;
-            padding: 1mm 2mm !important;
-            font-size: 6.5pt !important;
-          }
-          .season-or-label {
-            font-size: 6pt !important;
+          .print-summary > div { padding: 2mm 3mm !important; border-radius: 2mm !important; }
+          .print-summary .text-4xl,
+          .print-summary .text-5xl { font-size: 13pt !important; line-height: 1.1 !important; }
+          .print-summary .text-sm,
+          .print-summary .text-xs { font-size: 6.5pt !important; }
+
+          /* ── TITULOS ── */
+          .print-area h2 { font-size: 8pt !important; margin: 0 0 0.5mm 0 !important; }
+          .print-area h3 { font-size: 7pt !important; margin: 0 !important; }
+          /* Ocultar paragrafo descritivo abaixo de Opcoes de Hospedagem */
+          .print-area > section > p { display: none !important; }
+
+          /* ── GRID DE RESORTS: 2 colunas ── */
+          .print-resorts {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr !important;
+            gap: 1.5mm !important;
+            margin: 0 !important;
+            flex: 1 1 auto !important;
           }
 
-          /* Cards (sempre face frontal) */
+          /* ── FLIP CARD: sempre face frontal ── */
           .flip-card, .flip-card-inner, .flip-face {
             position: static !important;
             transform: none !important;
@@ -296,33 +319,64 @@ function Index() {
           }
           .flip-back { display: none !important; }
 
+          /* ── CARD DE RESORT COMPACTO ── */
           .print-resorts article,
           .print-resorts .flip-face {
-            padding: 2mm !important;
-            border-radius: 2mm !important;
+            border-radius: 1.5mm !important;
             border-width: 0.3mm !important;
+            overflow: hidden !important;
           }
-          .print-resorts .gap-2 { gap: 1mm !important; }
-          .print-resorts .gap-3 { gap: 1.5mm !important; }
-          .print-resorts .mb-3 { margin-bottom: 1mm !important; }
-          .print-resorts .mb-2 { margin-bottom: 0.8mm !important; }
-          .print-resorts .p-2\\.5, .print-resorts .p-3 { padding: 1mm !important; }
-          .print-resorts .text-xl, .print-resorts .text-2xl { font-size: 9pt !important; line-height: 1.1 !important; }
-          .print-resorts .text-lg { font-size: 8.5pt !important; }
-          .print-resorts .text-sm { font-size: 7pt !important; }
-          .print-resorts .text-xs { font-size: 6pt !important; line-height: 1.15 !important; }
-          .print-resorts [class*="text-["] { font-size: 6pt !important; }
+
+          /* Cabecalho do resort */
+          .print-resorts .flex.items-start.justify-between.p-5 {
+            padding: 1.5mm 2mm !important;
+          }
+          .print-resorts .text-slate-300 { font-size: 5.5pt !important; }
+
+          /* Linhas de quarto */
+          .print-resorts .divide-y > div { padding: 1.5mm 2mm !important; }
+          .print-resorts .mb-3 { margin-bottom: 0.5mm !important; }
+          .print-resorts .mb-2 { margin-bottom: 0.3mm !important; }
+          .print-resorts .p-2\.5, .print-resorts .p-3 { padding: 1mm !important; }
+          .print-resorts .gap-2 { gap: 0.5mm !important; }
+          .print-resorts .gap-3 { gap: 1mm !important; }
+
+          /* ── TEMPORADAS: grid 4 colunas por quarto ── */
+          .print-resorts .flex.flex-wrap.items-stretch {
+            display: grid !important;
+            grid-template-columns: repeat(4, 1fr) !important;
+            gap: 0.5mm !important;
+          }
+          /* Ocultar separadores 'ou' (removidos do fluxo do grid) */
+          .season-or-label { display: none !important; }
+
+          /* Celula de temporada */
+          .print-resorts .flex-1 {
+            min-width: 0 !important;
+            padding: 0.8mm !important;
+            font-size: 5.5pt !important;
+            line-height: 1.1 !important;
+          }
+          .print-resorts .min-h-\[24px\] { min-height: 0 !important; }
+          .print-resorts .text-xl,
+          .print-resorts .text-2xl { font-size: 8pt !important; line-height: 1.1 !important; }
+          .print-resorts .text-lg { font-size: 7.5pt !important; }
+          .print-resorts .text-sm { font-size: 6pt !important; }
+          .print-resorts .text-xs { font-size: 5.5pt !important; line-height: 1.1 !important; }
+          .print-resorts .text-\[10px\] { font-size: 5.5pt !important; }
+          .print-resorts [class*="text-["] { font-size: 5.5pt !important; }
+          .print-resorts .mt-1 { margin-top: 0.3mm !important; }
           .print-resorts br { display: none !important; }
 
-          /* Footer */
+          /* ── RODAPE ── */
           .print-area footer {
             padding: 1.5mm 2mm !important;
-            font-size: 6.5pt !important;
+            font-size: 6pt !important;
             margin-top: auto !important;
             border-radius: 1.5mm !important;
           }
 
-          /* Quebras */
+          /* Sem quebras de pagina */
           article, section, .flip-card {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
@@ -366,19 +420,33 @@ function Index() {
                 <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
               </Link>
             </div>
-            <button
-              onClick={handlePrint}
-              disabled={!hasResult || !isEligible}
-              title={
-                !hasResult || !isEligible
-                  ? "Disponível apenas para propostas elegíveis (≥ 8.000 pts)"
-                  : ""
-              }
-              className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-white/30 bg-white/10 hover:bg-white/20 px-4 py-2 text-sm font-semibold text-white shadow-md transition disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <Printer className="h-4 w-4" />
-              Imprimir
-            </button>
+            <div className="flex items-center gap-2">
+              {/* Campo Consultor — permanece no header (no-print) */}
+              <div className="flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5">
+                <Users className="h-3.5 w-3.5 text-white/70 flex-shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Nome do Consultor"
+                  value={consultorName}
+                  onChange={(e) => setConsultorName(e.target.value)}
+                  className="bg-transparent text-white placeholder-white/40 text-xs font-medium outline-none w-36"
+                  maxLength={50}
+                />
+              </div>
+              <button
+                onClick={handlePrint}
+                disabled={!hasResult || !isEligible}
+                title={
+                  !hasResult || !isEligible
+                    ? "Disponível apenas para propostas elegíveis (≥ 8.000 pts)"
+                    : ""
+                }
+                className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-white/30 bg-white/10 hover:bg-white/20 px-4 py-2 text-sm font-semibold text-white shadow-md transition disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Printer className="h-4 w-4" />
+                Imprimir
+              </button>
+            </div>
           </div>
 
           {/* Icon + title */}
@@ -400,10 +468,16 @@ function Index() {
 
       <div className="print-area-wrapper mx-auto max-w-6xl px-4 py-6 sm:py-10">
         <div className="print-area bg-transparent">
-          {/* Header visível apenas na impressão */}
-          <div className="print-only mb-4 text-center">
-            <h1 className="text-xl font-bold text-slate-900">Calculadora de Conversão Time Share — GAV Resorts</h1>
-            {exportDate && <p className="mt-1 text-sm text-slate-600">{exportDate}</p>}
+          {/* OPR Header — visivel apenas na impressao */}
+          <div className="print-only">
+            <div className="print-opr-brand">
+              <h1>Calculadora de Conversão — Time Share GAV Resorts</h1>
+              <p>Análise de Reaproveitamento de Saldo · One Page Report</p>
+            </div>
+            <div className="print-opr-meta">
+              {exportDate && <div>{exportDate}</div>}
+              <div>Consultor: {consultorName || "—"}</div>
+            </div>
           </div>
 
           {/* Input */}
