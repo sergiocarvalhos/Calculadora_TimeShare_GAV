@@ -1,8 +1,10 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Calculator, Calendar, Users, Sparkles, Info, AlertCircle, AlertTriangle, Printer, RotateCw, History, Check, X, Trash2, BarChart3, ArrowRight } from "lucide-react";
+import { Calculator, Calendar, Users, Sparkles, Info, AlertCircle, AlertTriangle, Printer, RotateCw, History, Check, X, Trash2, BarChart3, ArrowRight, LogOut } from "lucide-react";
 import { getConfig, CONFIG_UPDATED_EVENT, SEASONS } from "../lib/config-store";
 import type { AppConfig, Resort, Season } from "../lib/config-store";
+import { getConsultantSession, logoutConsultant } from "../lib/consultant-auth";
+import type { ConsultantSession } from "../lib/consultant-auth";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -36,9 +38,25 @@ type SimulationEntry = {
   points: number;
   status: ProposalStatus;
   rejectionReason?: string;
+  consultantId?: string;    // linked consultant (optional for backward compat)
+  consultantName?: string;  // denormalized full name
 };
 
 function Index() {
+  const router = useRouter();
+
+  // ===== Consultant session (SSR-safe: checked in useEffect) =====
+  const [consultant, setConsultant] = useState<ConsultantSession | null>(null);
+
+  useEffect(() => {
+    const session = getConsultantSession();
+    if (!session) {
+      router.navigate({ to: "/login" });
+      return;
+    }
+    setConsultant(session);
+  }, [router]);
+
   // ===== Config from store =====
   const [config, setConfig] = useState<AppConfig>(getConfig);
 
@@ -61,7 +79,6 @@ function Index() {
   const [masked, setMasked] = useState("");
   const [flipped, setFlipped] = useState<Record<string, boolean>>({});
   const [exportDate, setExportDate] = useState<string | null>(null);
-  const [consultorName, setConsultorName] = useState("");
 
   const balance = useMemo(() => {
     const d = masked.replace(/\D/g, "");
@@ -112,6 +129,8 @@ function Index() {
       balance,
       points: entryPoints,
       status: entryPoints >= MIN_POINTS ? "pendente" : "inelegivel",
+      consultantId: consultant?.consultantId,
+      consultantName: consultant?.fullName,
     };
     setHistory((h) => [entry, ...h].slice(0, 50));
   };
@@ -190,6 +209,19 @@ function Index() {
     // Safety fallback if afterprint doesn't fire
     setTimeout(cleanup, 2000);
   };
+
+  // ===== SESSION GATE =====
+  // During SSR and while the session check is running, show a loading screen.
+  // The useEffect above redirects to /login if there's no valid session.
+  if (!consultant) {
+    return (
+      <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #001f42 0%, #002B5C 60%, #004080 100%)", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: "12px" }}>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        <div style={{ width: "28px", height: "28px", border: "3px solid rgba(147,197,253,0.25)", borderTopColor: "rgba(147,197,253,0.85)", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+        <p style={{ color: "rgba(147,197,253,0.75)", fontSize: "14px", margin: 0 }}>Verificando acesso...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -421,18 +453,21 @@ function Index() {
               </Link>
             </div>
             <div className="flex items-center gap-2">
-              {/* Campo Consultor — permanece no header (no-print) */}
+              {/* Logged-in consultant indicator */}
               <div className="flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5">
                 <Users className="h-3.5 w-3.5 text-white/70 flex-shrink-0" />
-                <input
-                  type="text"
-                  placeholder="Nome do Consultor"
-                  value={consultorName}
-                  onChange={(e) => setConsultorName(e.target.value)}
-                  className="bg-transparent text-white placeholder-white/40 text-xs font-medium outline-none w-36"
-                  maxLength={50}
-                />
+                <span className="text-xs font-medium text-white/90 truncate max-w-[130px]">
+                  {consultant.firstName} {consultant.lastName}
+                </span>
               </div>
+              <button
+                onClick={() => { logoutConsultant(); router.navigate({ to: "/login" }); }}
+                title="Sair do sistema"
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 hover:bg-red-500/20 hover:border-red-400/40 px-3 py-1.5 text-xs font-medium text-white/80 transition"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                Sair
+              </button>
               <button
                 onClick={handlePrint}
                 disabled={!hasResult || !isEligible}
@@ -476,7 +511,7 @@ function Index() {
             </div>
             <div className="print-opr-meta">
               {exportDate && <div>{exportDate}</div>}
-              <div>Consultor: {consultorName || "—"}</div>
+              <div>Consultor: {consultant.fullName}</div>
             </div>
           </div>
 

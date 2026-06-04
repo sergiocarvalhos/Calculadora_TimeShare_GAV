@@ -37,6 +37,8 @@ import {
 import { useIsMobile } from "../hooks/use-mobile";
 import { getConfig, saveConfig, resetConfig, generateId, SEASONS, CONFIG_UPDATED_EVENT } from "../lib/config-store";
 import type { AppConfig, Resort, Room, Season } from "../lib/config-store";
+import { getConsultants, addConsultant, toggleConsultantActive, getFullName, CONSULTANTS_UPDATED_EVENT } from "../lib/consultant-store";
+import type { Consultant, ConsultantRole } from "../lib/consultant-store";
 
 export const Route = createFileRoute("/admin")({
   component: AdminDashboard,
@@ -49,24 +51,18 @@ export const Route = createFileRoute("/admin")({
 });
 
 // ===== TYPES =====
-type Role = "Consultor" | "Supervisor" | "Administrador";
+type Role = ConsultantRole; // aliased from consultant-store
 
-type Simulation = {
+// Real simulation history entry (matches what index.tsx writes to localStorage)
+type RealHistoryEntry = {
   id: string;
-  date: string;
-  consultant: string;
-  resort: string;
-  product: string;
-  value: number;
-  status: "Aceita" | "Não Aceita";
+  createdAt: string;
+  balance: number;
+  points: number;
+  status: "pendente" | "aceita" | "nao_aceita" | "inelegivel";
   rejectionReason?: string;
-};
-
-type UserAccess = {
-  id: string;
-  email: string;
-  role: Role;
-  active: boolean;
+  consultantId?: string;
+  consultantName?: string;
 };
 
 // ===== PERMISSION HELPERS =====
@@ -80,7 +76,7 @@ function getCreatableRoles(role: Role): Role[] {
   return [];
 }
 
-function canToggleUser(currentRole: Role, targetUser: UserAccess, currentUserId: string): boolean {
+function canToggleUser(currentRole: Role, targetUser: Consultant, currentUserId: string): boolean {
   // Nobody can toggle themselves
   if (targetUser.id === currentUserId) return false;
   // Admin can toggle everyone except themselves (handled above)
@@ -200,81 +196,61 @@ function AdminDashboardInner() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ===== USERS (mock data) =====
+  // ===== USERS (from consultant store — real data) =====
+  const [users, setUsers] = useState<Consultant[]>([]);
 
-  const [users, setUsers] = useState<UserAccess[]>([
-    { id: "usr-1", email: "admin.sergio@gavresorts.com.br", role: "Administrador", active: true },
-    { id: "usr-2", email: "patricia.gestora@gavresorts.com.br", role: "Supervisor", active: true },
-    { id: "usr-3", email: "carlos.silva@gavresorts.com.br", role: "Consultor", active: true },
-    { id: "usr-4", email: "mariana.costa@gavresorts.com.br", role: "Consultor", active: true },
-    { id: "usr-5", email: "junior.vendas@gavresorts.com.br", role: "Consultor", active: false },
-  ]);
+  useEffect(() => {
+    setUsers(getConsultants());
+    const handler = () => setUsers(getConsultants());
+    window.addEventListener(CONSULTANTS_UPDATED_EVENT, handler);
+    window.addEventListener("storage", handler);
+    return () => {
+      window.removeEventListener(CONSULTANTS_UPDATED_EVENT, handler);
+      window.removeEventListener("storage", handler);
+    };
+  }, []);
 
-  // ===== CURRENT USER (simulated login) =====
-  const [currentUserId, setCurrentUserId] = useState("usr-1");
-  const currentUser = users.find((u) => u.id === currentUserId)!;
+  // ===== CURRENT USER (profile switcher — defaults to first Administrador) =====
+  const [currentUserId, setCurrentUserId] = useState("");
+  const defaultAdminUser: Consultant = {
+    id: "admin-default",
+    firstName: "Admin",
+    lastName: "GAV",
+    email: "admin@gavresorts.com.br",
+    role: "Administrador",
+    pin: "",
+    active: true,
+    createdAt: new Date(0).toISOString(),
+  };
+  const currentUser =
+    users.find((u) => u.id === currentUserId) ??
+    users.find((u) => u.role === "Administrador") ??
+    defaultAdminUser;
 
-  // ===== SIMULATIONS =====
+  // ===== REAL SIMULATION HISTORY (from localStorage — matches index.tsx) =====
+  const HISTORY_KEY = "timeshare:history";
   const [historySearch, setHistorySearch] = useState("");
-  const [selectedRejection, setSelectedRejection] = useState<Simulation | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<Simulation | null>(null);
-  const [simulations, setSimulations] = useState<Simulation[]>([
-    {
-      id: "sim-1",
-      date: "27/05/2026 14:32",
-      consultant: "Carlos Silva",
-      resort: "Exclusive GAV Resort",
-      product: "100.000 pontos",
-      value: 17000.0,
-      status: "Aceita",
-    },
-    {
-      id: "sim-2",
-      date: "26/05/2026 11:15",
-      consultant: "Mariana Costa",
-      resort: "Park GAV Resort",
-      product: "80.000 pontos",
-      value: 13600.0,
-      status: "Não Aceita",
-      rejectionReason:
-        "O cliente achou as parcelas mensais de reaproveitamento muito elevadas para o orçamento doméstico atual, optando por renegociar o saldo em diárias diretas no balcão de atendimento.",
-    },
-    {
-      id: "sim-3",
-      date: "25/05/2026 16:45",
-      consultant: "Roberto Souza",
-      resort: "Porto Alto Resort",
-      product: "150.000 pontos",
-      value: 25500.0,
-      status: "Aceita",
-    },
-    {
-      id: "sim-4",
-      date: "25/05/2026 09:20",
-      consultant: "Luciana Dias",
-      resort: "Premium GAV Resort",
-      product: "60.000 pontos",
-      value: 10200.0,
-      status: "Não Aceita",
-      rejectionReason:
-        "Cliente viaja poucas vezes por ano e prefere manter flexibilidade de reservas pontuais no mercado livre em vez de se fidelizar ao sistema de pontos por 5 anos.",
-    },
-    {
-      id: "sim-5",
-      date: "24/05/2026 15:10",
-      consultant: "Fernando Lima",
-      resort: "Pyrenéus Residence",
-      product: "90.000 pontos",
-      value: 15300.0,
-      status: "Aceita",
-    },
-  ]);
+  const [consultorFilter, setConsultorFilter] = useState("");
+  const [selectedRejection, setSelectedRejection] = useState<RealHistoryEntry | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<RealHistoryEntry | null>(null);
+  const [simulations, setSimulations] = useState<RealHistoryEntry[]>([]);
 
-  // ===== ADD USER MODAL =====
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(HISTORY_KEY);
+      if (raw) setSimulations(JSON.parse(raw));
+    } catch { /* ignore */ }
+  }, []);
+
+  // ===== ADD CONSULTANT MODAL =====
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
+  const [newFirstName, setNewFirstName] = useState("");
+  const [newLastName, setNewLastName] = useState("");
   const [newEmail, setNewEmail] = useState("");
+  const [newPin, setNewPin] = useState("");
   const [newRole, setNewRole] = useState<Role>("Consultor");
   const [newActive, setNewActive] = useState(true);
+
 
   // ===== AUTH HANDLERS =====
   const handleLogin = (e: React.FormEvent) => {
@@ -298,25 +274,31 @@ function AdminDashboardInner() {
   const handleToggleUserActive = (id: string) => {
     const target = users.find((u) => u.id === id);
     if (!target || !canToggleUser(currentUser.role, target, currentUserId)) return;
-    setUsers((prev) => prev.map((user) => (user.id === id ? { ...user, active: !user.active } : user)));
+    toggleConsultantActive(id);
+    // State updates via CONSULTANTS_UPDATED_EVENT listener
   };
 
   const handleAddUser = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newEmail.trim() || !canCreateUsers(currentUser.role)) return;
+    if (!newFirstName.trim() || !newLastName.trim() || !newEmail.trim() || newPin.length < 4) return;
+    if (!canCreateUsers(currentUser.role)) return;
 
     const creatableRoles = getCreatableRoles(currentUser.role);
     const roleToAssign = creatableRoles.includes(newRole) ? newRole : creatableRoles[0];
 
-    const newUser: UserAccess = {
-      id: `usr-${Date.now()}`,
+    addConsultant({
+      firstName: newFirstName.trim(),
+      lastName: newLastName.trim(),
       email: newEmail.trim().toLowerCase(),
+      pin: newPin.slice(0, 6),
       role: roleToAssign,
       active: newActive,
-    };
+    });
 
-    setUsers((prev) => [...prev, newUser]);
+    setNewFirstName("");
+    setNewLastName("");
     setNewEmail("");
+    setNewPin("");
     setNewRole("Consultor");
     setNewActive(true);
     setIsAddUserOpen(false);
@@ -324,7 +306,9 @@ function AdminDashboardInner() {
 
   const handleDeleteSimulation = (id: string) => {
     if (!canDeleteSimulation(currentUser.role)) return;
-    setSimulations((prev) => prev.filter((sim) => sim.id !== id));
+    const updated = simulations.filter((sim) => sim.id !== id);
+    setSimulations(updated);
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(updated)); } catch { /* ignore */ }
     setDeleteConfirm(null);
   };
 
@@ -337,13 +321,15 @@ function AdminDashboardInner() {
   const filteredSimulations = useMemo(() => {
     return simulations.filter((sim) => {
       const term = historySearch.toLowerCase();
-      return (
-        sim.consultant.toLowerCase().includes(term) ||
-        sim.resort.toLowerCase().includes(term) ||
-        sim.product.toLowerCase().includes(term)
-      );
+      const byConsultor = !consultorFilter || sim.consultantId === consultorFilter;
+      const byText =
+        !term ||
+        (sim.consultantName ?? "").toLowerCase().includes(term) ||
+        sim.status.toLowerCase().includes(term) ||
+        sim.id.toLowerCase().includes(term);
+      return byConsultor && byText;
     });
-  }, [simulations, historySearch]);
+  }, [simulations, historySearch, consultorFilter]);
 
   // ===== CONFIG HANDLERS =====
   const handleSaveConfig = () => {
@@ -711,7 +697,7 @@ function AdminDashboardInner() {
               className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-xs font-semibold cursor-pointer ${roleStyles.bg} ${roleStyles.text} ${roleStyles.border} hover:shadow-md`}
             >
               {getRoleIcon(currentUser.role)}
-              <span className="hidden sm:inline max-w-[140px] truncate">{currentUser.email.split("@")[0]}</span>
+              <span className="hidden sm:inline max-w-[140px] truncate">{getFullName(currentUser) || currentUser.email?.split("@")[0] || "Admin"}</span>
               <span className="sm:hidden">{currentUser.role.slice(0, 3)}</span>
               <ChevronDown className={`h-3.5 w-3.5 transition-transform ${profileMenuOpen ? "rotate-180" : ""}`} />
             </button>
@@ -746,7 +732,8 @@ function AdminDashboardInner() {
                               {getRoleIcon(user.role)}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className="text-xs font-semibold text-slate-800 truncate">{user.email}</p>
+                              <p className="text-xs font-semibold text-slate-800 truncate">{user.firstName} {user.lastName}</p>
+                              <p className="text-[10px] text-slate-500 truncate">{user.email}</p>
                               <p className={`text-[10px] font-bold ${styles.text}`}>{user.role}</p>
                             </div>
                             {isSelected && (
@@ -787,9 +774,9 @@ function AdminDashboardInner() {
                     <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
                       Total de Simulações
                     </span>
-                    <span className="text-3xl font-bold text-slate-800 mt-2 block">142</span>
-                    <span className="text-xs text-emerald-600 font-semibold mt-1 inline-flex items-center gap-1">
-                      <TrendingUp className="h-3 w-3" /> +12% vs último mês
+                    <span className="text-3xl font-bold text-slate-800 mt-2 block">{simulations.length}</span>
+                    <span className="text-xs text-slate-500 font-medium mt-1 inline-flex items-center gap-1">
+                      {simulations.filter(s => s.status === "aceita").length} aceitas / {simulations.filter(s => s.status === "nao_aceita").length} não aceitas
                     </span>
                   </div>
                   <div className="h-12 w-12 rounded-xl bg-blue-50 text-[#002B5C] flex items-center justify-center">
@@ -803,7 +790,7 @@ function AdminDashboardInner() {
                     <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
                       Taxa de Conversão
                     </span>
-                    <span className="text-3xl font-bold text-slate-800 mt-2 block">38%</span>
+                    <span className="text-3xl font-bold text-slate-800 mt-2 block">{simulations.length > 0 ? Math.round((simulations.filter(s => s.status === "aceita").length / simulations.length) * 100) : 0}%</span>
                     <span className="text-xs text-slate-500 font-medium mt-1 block">Meta comercial: 40%</span>
                   </div>
                   <div className="h-12 w-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
@@ -817,7 +804,7 @@ function AdminDashboardInner() {
                     <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
                       Valor Total Retido
                     </span>
-                    <span className="text-3xl font-bold text-slate-800 mt-2 block">R$ 452.000,00</span>
+                    <span className="text-3xl font-bold text-slate-800 mt-2 block">{formatBRL(simulations.filter(s => s.status === "aceita").reduce((sum, s) => sum + s.balance, 0))}</span>
                     <span className="text-xs text-blue-600 font-semibold mt-1 inline-flex items-center gap-1">
                       Saldo reaproveitado ativo
                     </span>
@@ -903,12 +890,11 @@ function AdminDashboardInner() {
                         <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[11px]">
                           Consultor
                         </th>
-                        <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[11px]">
-                          Empreendimento
-                        </th>
-                        <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[11px]">Produto</th>
                         <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[11px] text-right">
-                          Valor Reaproveitado
+                          Pontos Gerados
+                        </th>
+                        <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[11px] text-right">
+                          Saldo Convertido
                         </th>
                         <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[11px] text-center">
                           Status
@@ -920,61 +906,55 @@ function AdminDashboardInner() {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {filteredSimulations.length > 0 ? (
-                        filteredSimulations.map((sim) => (
-                          <tr key={sim.id} className="hover:bg-slate-50/50 transition">
-                            <td className="p-4 text-slate-500 font-medium tabular-nums">{sim.date}</td>
-                            <td className="p-4 font-semibold text-slate-800">{sim.consultant}</td>
-                            <td className="p-4 text-slate-600">{sim.resort}</td>
-                            <td className="p-4 font-medium text-slate-700">{sim.product}</td>
-                            <td className="p-4 text-right font-bold text-slate-800 tabular-nums">
-                              {formatBRL(sim.value)}
-                            </td>
-                            <td className="p-4 text-center">
-                              {sim.status === "Aceita" ? (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">
-                                  <CheckCircle className="h-3.5 w-3.5" />
-                                  Aceita
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2.5 py-1 text-xs font-semibold text-rose-800">
-                                  <XCircle className="h-3.5 w-3.5" />
-                                  Não Aceita
-                                </span>
-                              )}
-                            </td>
-                            <td className="p-4 text-center">
-                              <div className="flex items-center justify-center gap-2">
-                                {sim.status === "Não Aceita" && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setSelectedRejection(sim)}
-                                    className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-slate-100 hover:bg-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 border border-slate-200 transition-colors"
-                                  >
-                                    <Eye className="h-3.5 w-3.5" />
-                                    Ver Motivo
-                                  </button>
-                                )}
-                                {canDeleteSimulation(currentUser.role) && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setDeleteConfirm(sim)}
-                                    className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-rose-50 hover:bg-rose-100 px-2.5 py-1.5 text-xs font-semibold text-rose-600 border border-rose-200 transition-colors"
-                                    title="Excluir simulação"
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </button>
-                                )}
-                                {sim.status === "Aceita" && !canDeleteSimulation(currentUser.role) && (
-                                  <span className="text-xs text-slate-400 italic font-medium">—</span>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        ))
+                        filteredSimulations.map((sim) => {
+                          const dateLabel = (() => {
+                            try { return new Date(sim.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }); }
+                            catch { return sim.createdAt; }
+                          })();
+                          const statusBadge = (() => {
+                            if (sim.status === "aceita") return <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800"><CheckCircle className="h-3.5 w-3.5" />Aceita</span>;
+                            if (sim.status === "nao_aceita") return <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2.5 py-1 text-xs font-semibold text-rose-800"><XCircle className="h-3.5 w-3.5" />Não Aceita</span>;
+                            if (sim.status === "inelegivel") return <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600"><XCircle className="h-3.5 w-3.5" />Inelegível</span>;
+                            return <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Pendente</span>;
+                          })();
+                          return (
+                            <tr key={sim.id} className="hover:bg-slate-50/50 transition">
+                              <td className="p-4 text-slate-500 font-medium tabular-nums">{dateLabel}</td>
+                              <td className="p-4 font-semibold text-slate-800">{sim.consultantName ?? <span className="text-slate-400 italic">—</span>}</td>
+                              <td className="p-4 text-right font-medium text-slate-700 tabular-nums">{sim.points?.toLocaleString("pt-BR") ?? "—"}</td>
+                              <td className="p-4 text-right font-bold text-slate-800 tabular-nums">{formatBRL(sim.balance ?? 0)}</td>
+                              <td className="p-4 text-center">{statusBadge}</td>
+                              <td className="p-4 text-center">
+                                <div className="flex items-center justify-center gap-2">
+                                  {sim.status === "nao_aceita" && sim.rejectionReason && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedRejection(sim)}
+                                      className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-slate-100 hover:bg-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 border border-slate-200 transition-colors"
+                                    >
+                                      <Eye className="h-3.5 w-3.5" />
+                                      Ver Motivo
+                                    </button>
+                                  )}
+                                  {canDeleteSimulation(currentUser.role) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setDeleteConfirm(sim)}
+                                      className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-rose-50 hover:bg-rose-100 px-2.5 py-1.5 text-xs font-semibold text-rose-600 border border-rose-200 transition-colors"
+                                      title="Excluir simulação"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
                       ) : (
                         <tr>
-                          <td colSpan={7} className="p-8 text-center text-slate-400 font-medium">
-                            Nenhum registro encontrado para o termo buscado.
+                          <td colSpan={6} className="p-8 text-center text-slate-400 font-medium">
+                            {simulations.length === 0 ? "Nenhuma simulação registrada ainda." : "Nenhum registro encontrado para o termo buscado."}
                           </td>
                         </tr>
                       )}
@@ -1014,7 +994,7 @@ function AdminDashboardInner() {
                     className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-[#002B5C] hover:opacity-90 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition-opacity"
                   >
                     <UserPlus className="h-4 w-4" />
-                    Adicionar Usuário
+                    Adicionar Consultor
                   </button>
                 </div>
               )}
@@ -1026,10 +1006,13 @@ function AdminDashboardInner() {
                     <thead>
                       <tr className="bg-slate-50/75 border-b border-slate-200">
                         <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[11px]">
-                          E-mail do Usuário
+                          Nome / E-mail
                         </th>
                         <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[11px]">
-                          Nível de Acesso
+                          Cargo
+                        </th>
+                        <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[11px] text-center">
+                          PIN
                         </th>
                         <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[11px] text-center">
                           Status
@@ -1037,15 +1020,23 @@ function AdminDashboardInner() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {users.map((user) => {
+                      {users.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="p-8 text-center text-slate-400 font-medium">
+                            Nenhum consultor cadastrado. Clique em "Adicionar Consultor" para começar.
+                          </td>
+                        </tr>
+                      ) : users.map((user) => {
                         const canToggle = canToggleUser(currentUser.role, user, currentUserId);
                         const badgeStyles = getRoleBadgeStyles(user.role);
 
                         return (
                           <tr key={user.id} className="hover:bg-slate-50/50 transition">
-                            <td className="p-4 font-semibold text-slate-800 flex items-center gap-2">
-                              <Mail className="h-4 w-4 text-slate-400" />
-                              {user.email}
+                            <td className="p-4">
+                              <p className="font-semibold text-slate-800">{user.firstName} {user.lastName}</p>
+                              <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
+                                <Mail className="h-3 w-3" />{user.email}
+                              </p>
                             </td>
                             <td className="p-4">
                               <span
@@ -1054,6 +1045,9 @@ function AdminDashboardInner() {
                                 {getRoleIcon(user.role)}
                                 {user.role}
                               </span>
+                            </td>
+                            <td className="p-4 text-center font-mono text-slate-500 tracking-widest text-sm">
+                              {"•".repeat(user.pin?.length || 4)}
                             </td>
                             <td className="p-4">
                               <div className="flex items-center justify-center gap-3">
@@ -1412,8 +1406,8 @@ function AdminDashboardInner() {
               <div>
                 <h3 className="font-bold text-slate-800">Motivo da Recusa</h3>
                 <p className="text-xs text-slate-500 mt-1">
-                  Consultor: <strong className="text-slate-700">{selectedRejection.consultant}</strong> ·{" "}
-                  {selectedRejection.date}
+                  Consultor: <strong className="text-slate-700">{selectedRejection.consultantName ?? "—"}</strong> ·{" "}
+                  {(() => { try { return new Date(selectedRejection.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }); } catch { return selectedRejection.createdAt; } })()}
                 </p>
               </div>
               <button
@@ -1468,8 +1462,8 @@ function AdminDashboardInner() {
                 <h3 className="font-bold text-lg text-slate-800">Excluir Simulação?</h3>
                 <p className="text-sm text-slate-500 mt-2">
                   Tem certeza que deseja excluir o registro de{" "}
-                  <strong className="text-slate-700">{deleteConfirm.consultant}</strong> em{" "}
-                  <strong className="text-slate-700">{deleteConfirm.resort}</strong>?
+                  <strong className="text-slate-700">{deleteConfirm.consultantName ?? "consultor desconhecido"}</strong>{" "}
+                  do dia <strong className="text-slate-700">{(() => { try { return new Date(deleteConfirm.createdAt).toLocaleDateString("pt-BR"); } catch { return deleteConfirm.createdAt; } })()}</strong>?
                 </p>
                 <p className="text-xs text-rose-500 font-semibold mt-2">Esta ação não pode ser desfeita.</p>
               </div>
@@ -1506,7 +1500,7 @@ function AdminDashboardInner() {
             <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-slate-50">
               <h3 className="font-bold text-slate-800 flex items-center gap-2">
                 <UserPlus className="h-5 w-5 text-[#002B5C]" />
-                Autorizar Novo Acesso
+                Cadastrar Novo Consultor
               </h3>
               <button
                 onClick={() => setIsAddUserOpen(false)}
@@ -1518,13 +1512,42 @@ function AdminDashboardInner() {
             {/* Modal Body */}
             <form onSubmit={handleAddUser}>
               <div className="p-6 space-y-4">
+                {/* Name fields - side by side */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label htmlFor="new-firstname" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                      Primeiro Nome
+                    </label>
+                    <input
+                      id="new-firstname"
+                      type="text"
+                      required
+                      placeholder="Ex: Carlos"
+                      value={newFirstName}
+                      onChange={(e) => setNewFirstName(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-sm font-medium text-slate-800 outline-none focus:bg-white focus:border-[#002B5C] focus:ring-2 focus:ring-blue-100 transition"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="new-lastname" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                      Sobrenome
+                    </label>
+                    <input
+                      id="new-lastname"
+                      type="text"
+                      required
+                      placeholder="Ex: Silva"
+                      value={newLastName}
+                      onChange={(e) => setNewLastName(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-sm font-medium text-slate-800 outline-none focus:bg-white focus:border-[#002B5C] focus:ring-2 focus:ring-blue-100 transition"
+                    />
+                  </div>
+                </div>
+
                 {/* Email field */}
                 <div>
-                  <label
-                    htmlFor="new-email"
-                    className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2"
-                  >
-                    E-mail do Usuário
+                  <label htmlFor="new-email" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    E-mail
                   </label>
                   <input
                     id="new-email"
@@ -1533,11 +1556,31 @@ function AdminDashboardInner() {
                     placeholder="exemplo@gavresorts.com.br"
                     value={newEmail}
                     onChange={(e) => setNewEmail(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 pl-3 pr-3 text-sm font-medium text-slate-800 outline-none focus:bg-white focus:border-[#002B5C] focus:ring-2 focus:ring-blue-100 transition"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-sm font-medium text-slate-800 outline-none focus:bg-white focus:border-[#002B5C] focus:ring-2 focus:ring-blue-100 transition"
                   />
                 </div>
 
-                {/* Role field - shows only roles the current user can create */}
+                {/* PIN field */}
+                <div>
+                  <label htmlFor="new-pin" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    PIN de Acesso (4–6 dígitos)
+                  </label>
+                  <input
+                    id="new-pin"
+                    type="password"
+                    inputMode="numeric"
+                    required
+                    minLength={4}
+                    maxLength={6}
+                    placeholder="••••••"
+                    value={newPin}
+                    onChange={(e) => setNewPin(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-sm font-bold tracking-widest text-slate-800 outline-none focus:bg-white focus:border-[#002B5C] focus:ring-2 focus:ring-blue-100 transition"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">Este PIN será usado pelo consultor para fazer login na calculadora.</p>
+                </div>
+
+                {/* Role field */}
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
                     Nível de Acesso
@@ -1612,9 +1655,10 @@ function AdminDashboardInner() {
                 </button>
                 <button
                   type="submit"
-                  className="rounded-lg bg-[#002B5C] hover:opacity-90 px-4 py-2 text-xs font-semibold text-white shadow-sm transition"
+                  disabled={!newFirstName.trim() || !newLastName.trim() || !newEmail.trim() || newPin.length < 4}
+                  className="rounded-lg bg-[#002B5C] hover:opacity-90 px-4 py-2 text-xs font-semibold text-white shadow-sm transition disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  Salvar Usuário
+                  Cadastrar Consultor
                 </button>
               </div>
             </form>
