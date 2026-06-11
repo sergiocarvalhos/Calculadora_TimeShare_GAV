@@ -284,7 +284,7 @@ function LoginPage() {
                     borderRadius: "12px",
                     padding: "13px 14px 13px 44px",
                     color: "white",
-                    fontSize: "14px",
+                    fontSize: "16px",
                     outline: "none",
                     boxSizing: "border-box",
                     transition: "all 0.2s",
@@ -306,7 +306,7 @@ function LoginPage() {
                   textTransform: "uppercase",
                 }}
               >
-                PIN (6 dígitos)
+                PIN de Acesso
               </label>
               <div style={{ position: "relative" }}>
                 <KeyRound
@@ -338,7 +338,7 @@ function LoginPage() {
                     borderRadius: "12px",
                     padding: "13px 48px 13px 44px",
                     color: "white",
-                    fontSize: "20px",
+                    fontSize: "16px",
                     letterSpacing: showPin ? "0.1em" : "0.35em",
                     outline: "none",
                     boxSizing: "border-box",
