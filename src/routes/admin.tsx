@@ -39,6 +39,10 @@ import { getConfig, saveConfig, resetConfig, generateId, SEASONS, CONFIG_UPDATED
 import type { AppConfig, Resort, Room, Season } from "../lib/config-store";
 import { getConsultants, addConsultant, toggleConsultantActive, getFullName, CONSULTANTS_UPDATED_EVENT } from "../lib/consultant-store";
 import type { Consultant, ConsultantRole } from "../lib/consultant-store";
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip, Legend, ResponsiveContainer,
+} from "recharts";
 
 export const Route = createFileRoute("/admin")({
   component: AdminDashboard,
@@ -330,6 +334,77 @@ function AdminDashboardInner() {
       return byConsultor && byText;
     });
   }, [simulations, historySearch, consultorFilter]);
+
+  // ===== CHART STATE =====
+  const CHART_COLORS = [
+    "#2563eb", "#16a34a", "#dc2626", "#d97706", "#7c3aed",
+    "#0891b2", "#be185d", "#65a30d", "#0f172a", "#9333ea",
+  ];
+
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const thirtyDaysAgo = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return d.toISOString().slice(0, 10);
+  })();
+
+  const [chartDateFrom, setChartDateFrom] = useState(thirtyDaysAgo);
+  const [chartDateTo, setChartDateTo] = useState(todayISO);
+  const [chartConsultant, setChartConsultant] = useState<string>("all");
+
+  // ===== CHART DATA (aggregated by day per consultant) =====
+  const chartData = useMemo(() => {
+    const from = new Date(chartDateFrom + "T00:00:00");
+    const to = new Date(chartDateTo + "T23:59:59");
+    if (isNaN(from.getTime()) || isNaN(to.getTime()) || from > to) return [];
+
+    const filtered = simulations.filter((sim) => {
+      const d = new Date(sim.createdAt);
+      const inRange = d >= from && d <= to;
+      const inConsultant = chartConsultant === "all" || sim.consultantId === chartConsultant;
+      return inRange && inConsultant;
+    });
+
+    // Build day map for every day in range
+    const dayMap: Record<string, Record<string, number>> = {};
+    const cursor = new Date(from);
+    while (cursor <= to) {
+      const key = cursor.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+      dayMap[key] = { total: 0 };
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    // Aggregate simulations per day per consultant
+    for (const sim of filtered) {
+      const d = new Date(sim.createdAt);
+      const key = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+      const name = sim.consultantName ?? "Desconhecido";
+      if (dayMap[key] !== undefined) {
+        dayMap[key][name] = (dayMap[key][name] || 0) + 1;
+        dayMap[key].total = (dayMap[key].total || 0) + 1;
+      }
+    }
+
+    return Object.entries(dayMap).map(([date, counts]) => ({ date, ...counts }));
+  }, [simulations, chartDateFrom, chartDateTo, chartConsultant]);
+
+  // ===== CHART LINES (which consultant keys to render) =====
+  const chartLines = useMemo(() => {
+    if (chartConsultant !== "all") {
+      const c = users.find((u) => u.id === chartConsultant);
+      if (!c) return [];
+      const name = `${c.firstName} ${c.lastName}`;
+      return [{ key: name, label: name }];
+    }
+    // Collect all consultant names that have data in the filtered range
+    const names = new Set<string>();
+    chartData.forEach((d) => {
+      Object.keys(d).forEach((k) => {
+        if (k !== "date" && k !== "total") names.add(k);
+      });
+    });
+    return Array.from(names).map((name) => ({ key: name, label: name }));
+  }, [chartData, chartConsultant, users]);
 
   // ===== CONFIG HANDLERS =====
   const handleSaveConfig = () => {
@@ -815,26 +890,154 @@ function AdminDashboardInner() {
                 </div>
               </div>
 
-              {/* CHART PLACEHOLDER CONTAINER */}
-              <div className="bg-white border-2 border-dashed border-slate-200 rounded-3xl p-10 min-h-[400px] flex flex-col items-center justify-center text-center shadow-sm">
-                <div className="h-16 w-16 rounded-full bg-slate-50 text-slate-400 flex items-center justify-center border border-slate-100 mb-4">
-                  <LayoutDashboard className="h-8 w-8" />
+              {/* PERFORMANCE LINE CHART */}
+              <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                {/* Chart Header + Controls */}
+                <div className="p-5 border-b border-slate-100 flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
+                  <div>
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4 text-[#002B5C]" />
+                      Performance de Simulações
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">Volume diário de simulações no período selecionado</p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3 items-center">
+                    {/* Date From */}
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-xs font-bold text-slate-500 whitespace-nowrap uppercase tracking-wider">De</label>
+                      <input
+                        type="date"
+                        value={chartDateFrom}
+                        max={chartDateTo}
+                        onChange={(e) => setChartDateFrom(e.target.value)}
+                        className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-700 bg-slate-50 focus:outline-none focus:border-[#002B5C] focus:ring-1 focus:ring-blue-100 cursor-pointer"
+                      />
+                    </div>
+                    {/* Date To */}
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-xs font-bold text-slate-500 whitespace-nowrap uppercase tracking-wider">Até</label>
+                      <input
+                        type="date"
+                        value={chartDateTo}
+                        min={chartDateFrom}
+                        onChange={(e) => setChartDateTo(e.target.value)}
+                        className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-700 bg-slate-50 focus:outline-none focus:border-[#002B5C] focus:ring-1 focus:ring-blue-100 cursor-pointer"
+                      />
+                    </div>
+                    {/* Consultant Selector */}
+                    <select
+                      value={chartConsultant}
+                      onChange={(e) => setChartConsultant(e.target.value)}
+                      className="border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-50 focus:outline-none focus:border-[#002B5C] cursor-pointer min-w-[160px]"
+                    >
+                      <option value="all">Equipe completa</option>
+                      {users.filter((u) => u.active).map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.firstName} {u.lastName}
+                        </option>
+                      ))}
+                    </select>
+
+                    {/* Quick range buttons */}
+                    {[
+                      { label: "7d", days: 7 },
+                      { label: "30d", days: 30 },
+                      { label: "90d", days: 90 },
+                    ].map(({ label, days }) => (
+                      <button
+                        key={label}
+                        type="button"
+                        onClick={() => {
+                          const to = new Date();
+                          const from = new Date();
+                          from.setDate(from.getDate() - days);
+                          setChartDateFrom(from.toISOString().slice(0, 10));
+                          setChartDateTo(to.toISOString().slice(0, 10));
+                        }}
+                        className="px-2.5 py-1.5 text-[11px] font-bold rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition"
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <h3 className="text-base font-bold text-slate-700">Painel de Análise Visual</h3>
-                <p className="text-sm text-slate-500 max-w-sm mt-1">
-                  Este espaço está reservado para a futura integração de gráficos dinâmicos de performance (ex:
-                  Recharts, ChartJS), detalhando as taxas de sucesso por empreendimento.
-                </p>
-                <div className="mt-6 flex gap-2">
-                  <span className="px-3 py-1 bg-slate-100 rounded-md border border-slate-200 text-xs font-semibold text-slate-500">
-                    Volume diário
+
+                {/* Chart Body */}
+                <div className="p-4 pt-6">
+                  {chartLines.length === 0 || chartData.every((d) => (d.total ?? 0) === 0) ? (
+                    <div className="flex flex-col items-center justify-center h-[280px] text-slate-300">
+                      <Activity className="h-14 w-14 mb-3" />
+                      <p className="text-sm font-bold text-slate-400">Nenhuma simulação no período selecionado</p>
+                      <p className="text-xs text-slate-400 mt-1">Ajuste as datas ou aguarde novas simulações</p>
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={300}>
+                      <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                        <XAxis
+                          dataKey="date"
+                          tick={{ fontSize: 10, fill: "#94a3b8", fontWeight: 600 }}
+                          tickLine={false}
+                          axisLine={false}
+                          interval="preserveStartEnd"
+                        />
+                        <YAxis
+                          allowDecimals={false}
+                          tick={{ fontSize: 10, fill: "#94a3b8", fontWeight: 600 }}
+                          tickLine={false}
+                          axisLine={false}
+                          width={28}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            borderRadius: "12px",
+                            border: "1px solid #e2e8f0",
+                            boxShadow: "0 8px 24px rgba(0,43,92,0.10)",
+                            fontSize: "12px",
+                            padding: "10px 14px",
+                          }}
+                          labelStyle={{ fontWeight: 700, color: "#1e293b", marginBottom: "4px" }}
+                          itemStyle={{ color: "#475569" }}
+                          formatter={(value: number, name: string) => [`${value} simulaç${value === 1 ? "ão" : "ões"}`, name]}
+                        />
+                        <Legend
+                          iconType="circle"
+                          iconSize={8}
+                          wrapperStyle={{ fontSize: "11px", paddingTop: "16px", fontWeight: 600 }}
+                        />
+                        {chartLines.map((line, idx) => (
+                          <Line
+                            key={line.key}
+                            type="monotone"
+                            dataKey={line.key}
+                            name={line.label}
+                            stroke={CHART_COLORS[idx % CHART_COLORS.length]}
+                            strokeWidth={2.5}
+                            dot={{ r: 3.5, strokeWidth: 2, fill: "white" }}
+                            activeDot={{ r: 6, strokeWidth: 0 }}
+                            connectNulls
+                          />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+
+                {/* Chart Footer */}
+                <div className="px-5 pb-4 border-t border-slate-50 pt-3 flex flex-wrap gap-4 items-center">
+                  <span className="text-xs text-slate-500 font-semibold">
+                    {chartData.reduce((sum, d) => sum + ((d.total as number) || 0), 0)} simulações no período
                   </span>
-                  <span className="px-3 py-1 bg-slate-100 rounded-md border border-slate-200 text-xs font-semibold text-slate-500">
-                    Metas por resort
-                  </span>
-                  <span className="px-3 py-1 bg-slate-100 rounded-md border border-slate-200 text-xs font-semibold text-slate-500">
-                    Proporção de objeções
-                  </span>
+                  {chartConsultant !== "all" && (
+                    <button
+                      type="button"
+                      onClick={() => setChartConsultant("all")}
+                      className="text-xs text-blue-600 font-semibold hover:underline"
+                    >
+                      Ver equipe completa →
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
