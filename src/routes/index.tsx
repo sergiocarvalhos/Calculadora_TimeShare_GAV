@@ -473,7 +473,7 @@ function Index() {
                 disabled={!hasResult || !isEligible}
                 title={
                   !hasResult || !isEligible
-                    ? "Disponível apenas para propostas elegíveis (≥ 8.000 pts)"
+                    ? `Disponível apenas para propostas elegíveis (≥ ${MIN_POINTS.toLocaleString("pt-BR")} pts)`
                     : ""
                 }
                 className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-white/30 bg-white/10 hover:bg-white/20 px-4 py-2 text-sm font-semibold text-white shadow-md transition disabled:opacity-40 disabled:cursor-not-allowed"
@@ -548,7 +548,7 @@ function Index() {
               <div className="mt-4 flex items-center justify-between gap-3">
                 <p className="text-xs text-slate-500">
                   Digite o valor disponível como saldo para conversão em pontos.<br />
-                  <span className="text-slate-600">Mínimo para conversão: <strong>{formatBRL(MIN_BALANCE)}</strong> (8.000 pts).</span>
+                  <span className="text-slate-600">Mínimo para conversão: <strong>{formatBRL(MIN_BALANCE)}</strong> ({MIN_POINTS.toLocaleString("pt-BR")} pts).</span>
                 </p>
                 <div className="flex items-center gap-2">
                   <button
@@ -588,7 +588,7 @@ function Index() {
                   <div className="min-w-0 flex-1">
                     <h2 className="text-lg font-bold text-amber-900">Saldo insuficiente para proposta Time Share</h2>
                     <p className="mt-2 text-sm text-amber-900/90">
-                      São necessários no mínimo <strong>8.000 pontos</strong> (equivalente a{" "}
+                      São necessários no mínimo <strong>{MIN_POINTS.toLocaleString("pt-BR")} pontos</strong> (equivalente a{" "}
                       <strong>{formatBRL(MIN_BALANCE)}</strong> de saldo) para que a conversão seja elegível.
                     </p>
                     <p className="mt-2 text-sm text-amber-900/90">
