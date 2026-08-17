@@ -32,7 +32,7 @@ export type AppConfig = {
 // ===== DEFAULT VALUES (same as the original hardcoded data) =====
 export const DEFAULT_CONFIG: AppConfig = {
   pointCost: 0.17,
-  minPoints: 8000,
+  minPoints: 6400,
   minNights: 2,
   resorts: [
     {
@@ -40,8 +40,8 @@ export const DEFAULT_CONFIG: AppConfig = {
       name: "Park GAV Resort",
       tagline: "Diversão para a família",
       rooms: [
-        { id: "room-1-1", type: "1 Quarto", shortType: "1Q", capacity: 5, costs: { Baixa: 2800, Média: 3000, Alta: 6300, Altíssima: 6500 }, balcao: { Baixa: 476.00, Média: 642.00, Alta: 2025.45, Altíssima: 2226.07 } },
-        { id: "room-1-2", type: "2 Quartos", shortType: "2Q", capacity: 8, costs: { Baixa: 4600, Média: 4800, Alta: 8900, Altíssima: 9200 }, balcao: { Baixa: 792.00, Média: 1062.00, Alta: 1671.60, Altíssima: 2089.50 } },
+        { id: "room-1-1", type: "1 Quarto", shortType: "1Q", capacity: 5, costs: { Baixa: 2240, Média: 2400, Alta: 5040, Altíssima: 5200 }, balcao: { Baixa: 476.00, Média: 642.00, Alta: 2025.45, Altíssima: 2226.07 } },
+        { id: "room-1-2", type: "2 Quartos", shortType: "2Q", capacity: 8, costs: { Baixa: 3680, Média: 3840, Alta: 7120, Altíssima: 7360 }, balcao: { Baixa: 792.00, Média: 1062.00, Alta: 1671.60, Altíssima: 2089.50 } },
       ],
     },
     {
@@ -49,8 +49,8 @@ export const DEFAULT_CONFIG: AppConfig = {
       name: "Exclusive GAV Resort",
       tagline: "Experiência exclusiva",
       rooms: [
-        { id: "room-2-1", type: "1 Quarto", shortType: "1Q", capacity: 4, costs: { Baixa: 2600, Média: 2800, Alta: 5900, Altíssima: 6000 }, balcao: { Baixa: 508.00, Média: 686.00, Alta: 1193.00, Altíssima: 1610.70 } },
-        { id: "room-2-2", type: "2 Quartos", shortType: "2Q", capacity: 7, costs: { Baixa: 4300, Média: 4500, Alta: 8000, Altíssima: 8300 }, balcao: { Baixa: 839.00, Média: 1133.00, Alta: 1650.00, Altíssima: 2226.77 } },
+        { id: "room-2-1", type: "1 Quarto", shortType: "1Q", capacity: 4, costs: { Baixa: 2080, Média: 2240, Alta: 4720, Altíssima: 4800 }, balcao: { Baixa: 508.00, Média: 686.00, Alta: 1193.00, Altíssima: 1610.70 } },
+        { id: "room-2-2", type: "2 Quartos", shortType: "2Q", capacity: 7, costs: { Baixa: 3440, Média: 3600, Alta: 6400, Altíssima: 6640 }, balcao: { Baixa: 839.00, Média: 1133.00, Alta: 1650.00, Altíssima: 2226.77 } },
       ],
     },
     {
@@ -58,8 +58,8 @@ export const DEFAULT_CONFIG: AppConfig = {
       name: "Premium GAV Resort",
       tagline: "Conforto refinado",
       rooms: [
-        { id: "room-3-1", type: "1 Quarto", shortType: "1Q", capacity: 4, costs: { Baixa: 2500, Média: 2600, Alta: 5700, Altíssima: 5900 }, balcao: { Baixa: 505.07, Média: 657.00, Alta: 1287.00, Altíssima: 1608.75 } },
-        { id: "room-3-2", type: "2 Quartos", shortType: "2Q", capacity: 7, costs: { Baixa: 4200, Média: 4500, Alta: 9000, Altíssima: 9300 }, balcao: { Baixa: 775.00, Média: 1195.00, Alta: 1748.00, Altíssima: 1748.00 } },
+        { id: "room-3-1", type: "1 Quarto", shortType: "1Q", capacity: 4, costs: { Baixa: 2000, Média: 2080, Alta: 4560, Altíssima: 4720 }, balcao: { Baixa: 505.07, Média: 657.00, Alta: 1287.00, Altíssima: 1608.75 } },
+        { id: "room-3-2", type: "2 Quartos", shortType: "2Q", capacity: 7, costs: { Baixa: 3360, Média: 3600, Alta: 7200, Altíssima: 7440 }, balcao: { Baixa: 775.00, Média: 1195.00, Alta: 1748.00, Altíssima: 1748.00 } },
       ],
     },
     {
@@ -67,8 +67,8 @@ export const DEFAULT_CONFIG: AppConfig = {
       name: "Porto Alto Resort",
       tagline: "Beira-mar premium",
       rooms: [
-        { id: "room-4-1", type: "1 Quarto", shortType: "1Q", capacity: 4, costs: { Média: 6300, Alta: 9100, Altíssima: 13600 }, balcao: { Média: 1266.00, Alta: 1682.10, Altíssima: 2102.63 } },
-        { id: "room-4-2", type: "2 Quartos", shortType: "2Q", capacity: 6, costs: { Média: 12400, Alta: 18000, Altíssima: 27000 }, balcao: { Média: 2421.00, Alta: 3218.25, Altíssima: 4022.81 } },
+        { id: "room-4-1", type: "1 Quarto", shortType: "1Q", capacity: 4, costs: { Média: 5040, Alta: 7280, Altíssima: 10880 }, balcao: { Média: 1266.00, Alta: 1682.10, Altíssima: 2102.63 } },
+        { id: "room-4-2", type: "2 Quartos", shortType: "2Q", capacity: 6, costs: { Média: 9920, Alta: 14400, Altíssima: 21600 }, balcao: { Média: 2421.00, Alta: 3218.25, Altíssima: 4022.81 } },
       ],
     },
     {
@@ -76,7 +76,7 @@ export const DEFAULT_CONFIG: AppConfig = {
       name: "Pyrenéus Residence",
       tagline: "Águas termais",
       rooms: [
-        { id: "room-5-1", type: "1 Quarto", shortType: "1Q", capacity: 4, costs: { Baixa: 4600, Média: 4800, Alta: 7300, Altíssima: 9100 }, balcao: { Baixa: 756.00, Média: 945.00, Alta: 1562.00, Altíssima: 1563.00 } },
+        { id: "room-5-1", type: "1 Quarto", shortType: "1Q", capacity: 4, costs: { Baixa: 3680, Média: 3840, Alta: 5840, Altíssima: 7280 }, balcao: { Baixa: 756.00, Média: 945.00, Alta: 1562.00, Altíssima: 1563.00 } },
       ],
     },
   ],
