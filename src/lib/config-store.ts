@@ -85,12 +85,24 @@ export const DEFAULT_CONFIG: AppConfig = {
 // ===== STORAGE KEY =====
 const STORAGE_KEY = "timeshare:config";
 
+// ===== CONFIG VERSION =====
+// Bump this number whenever DEFAULT_CONFIG values change (e.g. 20% discount).
+// When the stored version doesn't match, localStorage is reset to new defaults.
+const CONFIG_VERSION = 2;
+const VERSION_KEY = "timeshare:config-version";
+
 // ===== CUSTOM EVENT for cross-component sync =====
 export const CONFIG_UPDATED_EVENT = "timeshare:config-updated";
 
 // ===== GET CONFIG =====
 export function getConfig(): AppConfig {
   try {
+    const storedVersion = Number(localStorage.getItem(VERSION_KEY) || "0");
+    if (storedVersion < CONFIG_VERSION) {
+      // Defaults changed — clear old config so new values take effect
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.setItem(VERSION_KEY, String(CONFIG_VERSION));
+    }
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<AppConfig>;
