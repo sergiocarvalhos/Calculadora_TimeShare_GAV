@@ -208,6 +208,9 @@ function Index() {
     const mi = String(now.getMinutes()).padStart(2, "0");
     setExportDate(`Simulação realizada em: ${dd}/${mm}/${yyyy} às ${hh}:${mi}`);
 
+    const originalTitle = document.title;
+    document.title = `Proposta ${clientName || "Cliente"} - Time Share`;
+
     // Wait two animation frames so React commits the date into the DOM
     await new Promise<void>((r) =>
       requestAnimationFrame(() => requestAnimationFrame(() => r()))
@@ -215,6 +218,7 @@ function Index() {
 
     const cleanup = () => {
       setExportDate(null);
+      document.title = originalTitle;
       window.removeEventListener("afterprint", cleanup);
     };
     window.addEventListener("afterprint", cleanup);
