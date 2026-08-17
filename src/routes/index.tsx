@@ -80,6 +80,21 @@ function Index() {
   const [flipped, setFlipped] = useState<Record<string, boolean>>({});
   const [exportDate, setExportDate] = useState<string | null>(null);
 
+  // ===== CLIENT DATA (required for printing) =====
+  const [clientName, setClientName] = useState("");
+  const [clientCpf, setClientCpf] = useState("");
+
+  const maskCpf = (value: string) => {
+    const digits = value.replace(/\D/g, "").slice(0, 11);
+    return digits
+      .replace(/(\d{3})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+  };
+
+  const cpfDigitsCount = clientCpf.replace(/\D/g, "").length;
+  const isClientDataValid = clientName.trim().length >= 5 && cpfDigitsCount === 11;
+
   const balance = useMemo(() => {
     const d = masked.replace(/\D/g, "");
     if (!d) return 0;
@@ -470,10 +485,12 @@ function Index() {
               </button>
               <button
                 onClick={handlePrint}
-                disabled={!hasResult || !isEligible}
+                disabled={!hasResult || !isEligible || !isClientDataValid}
                 title={
                   !hasResult || !isEligible
                     ? `Disponível apenas para propostas elegíveis (≥ ${MIN_POINTS.toLocaleString("pt-BR")} pts)`
+                    : !isClientDataValid
+                    ? "Preencha o Nome e CPF do cliente para liberar a impressão"
                     : ""
                 }
                 className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-white/30 bg-white/10 hover:bg-white/20 px-4 py-2 text-sm font-semibold text-white shadow-md transition disabled:opacity-40 disabled:cursor-not-allowed"
@@ -512,6 +529,7 @@ function Index() {
             <div className="print-opr-meta">
               {exportDate && <div>{exportDate}</div>}
               <div>Consultor: {consultant.fullName}</div>
+              {clientName && <div>Cliente: {clientName}{clientCpf ? ` | CPF: ${clientCpf}` : ""}</div>}
             </div>
           </div>
 
@@ -631,6 +649,55 @@ function Index() {
 
           {hasResult && isEligible && (
             <>
+              {/* Client Data — required before printing */}
+              <section className="print-hide mx-auto mb-8 max-w-2xl">
+                <div className="rounded-2xl border-2 border-blue-200 bg-blue-50/50 p-6 shadow-sm">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+                      <Users className="h-4 w-4" />
+                    </div>
+                    <h3 className="text-sm font-bold text-blue-900">Dados do Cliente <span className="text-xs font-normal text-blue-600">(obrigatório para gerar proposta)</span></h3>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <label htmlFor="clientName" className="mb-1.5 block text-xs font-semibold text-slate-600">Nome Completo</label>
+                      <input
+                        id="clientName"
+                        type="text"
+                        placeholder="Copie o nome completo do CRM"
+                        value={clientName}
+                        onChange={(e) => setClientName(e.target.value)}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="clientCpf" className="mb-1.5 block text-xs font-semibold text-slate-600">CPF</label>
+                      <input
+                        id="clientCpf"
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="000.000.000-00"
+                        value={clientCpf}
+                        onChange={(e) => setClientCpf(maskCpf(e.target.value))}
+                        maxLength={14}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 tabular-nums"
+                      />
+                    </div>
+                  </div>
+                  {!isClientDataValid && (
+                    <p className="mt-3 flex items-center gap-1.5 text-xs text-amber-700">
+                      <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                      Preencha o nome (mín. 5 caracteres) e CPF (11 dígitos) do cliente para liberar o botão Imprimir.
+                    </p>
+                  )}
+                  {isClientDataValid && (
+                    <p className="mt-3 flex items-center gap-1.5 text-xs text-emerald-700">
+                      <Check className="h-3.5 w-3.5 flex-shrink-0" />
+                      Dados do cliente preenchidos — proposta pronta para impressão.
+                    </p>
+                  )}
+                </div>
+              </section>
               {/* Summary */}
               <section className="print-summary mb-8 grid gap-4 sm:grid-cols-2">
                 <div
