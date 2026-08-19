@@ -46,14 +46,14 @@ function LoginPage() {
   }, [router]);
 
   const handlePinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.replace(/\D/g, "").slice(0, 6);
+    const value = e.target.value.replace(/[^a-zA-Z0-9]/g, "").slice(0, 20);
     setPin(value);
     setError(false);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || pin.length < 4 || loading) return;
+    if (!email.trim() || pin.length < 6 || loading) return;
     setLoading(true);
 
     // Small delay for UX feedback
@@ -324,12 +324,11 @@ function LoginPage() {
                 <input
                   className="login-input"
                   type={showPin ? "text" : "password"}
-                  inputMode="numeric"
                   autoComplete="current-password"
                   value={pin}
                   onChange={handlePinChange}
                   placeholder="••••••"
-                  maxLength={6}
+                  maxLength={20}
                   required
                   style={{
                     width: "100%",
@@ -421,7 +420,7 @@ function LoginPage() {
             <button
               className="login-btn"
               type="submit"
-              disabled={!email.trim() || pin.length < 4 || loading}
+              disabled={!email.trim() || pin.length < 6 || loading}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -436,10 +435,10 @@ function LoginPage() {
                 fontSize: "15px",
                 fontWeight: 700,
                 cursor:
-                  loading || !email.trim() || pin.length < 4
+                  loading || !email.trim() || pin.length < 6
                     ? "not-allowed"
                     : "pointer",
-                opacity: !email.trim() || pin.length < 4 ? 0.55 : 1,
+                opacity: !email.trim() || pin.length < 6 ? 0.55 : 1,
                 transition: "all 0.2s",
                 marginTop: "4px",
               }}
