@@ -1,10 +1,12 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Calculator, Calendar, Users, Sparkles, Info, AlertCircle, AlertTriangle, Printer, RotateCw, History, Check, X, Trash2, BarChart3, ArrowRight, LogOut } from "lucide-react";
+import { Calculator, Calendar, Users, Sparkles, Info, AlertCircle, AlertTriangle, Printer, RotateCw, History, Check, X, Trash2, BarChart3, ArrowRight, LogOut, CheckCircle } from "lucide-react";
 import { getConfig, CONFIG_UPDATED_EVENT, SEASONS } from "../lib/config-store";
 import type { AppConfig, Resort, Season } from "../lib/config-store";
 import { getConsultantSession, logoutConsultant } from "../lib/consultant-auth";
 import type { ConsultantSession } from "../lib/consultant-auth";
+import { getConsultants, updateConsultant, isValidPin } from "../lib/consultant-store";
+import { Lock } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -47,6 +49,17 @@ function Index() {
 
   // ===== Consultant session (SSR-safe: checked in useEffect) =====
   const [consultant, setConsultant] = useState<ConsultantSession | null>(null);
+  const [mustChangePinScreen, setMustChangePinScreen] = useState(false);
+  const [changePinNew, setChangePinNew] = useState('');
+  const [changePinConfirm, setChangePinConfirm] = useState('');
+  const [changePinError, setChangePinError] = useState('');
+
+  const [changeOwnPinOpen, setChangeOwnPinOpen] = useState(false);
+  const [ownPinCurrent, setOwnPinCurrent] = useState('');
+  const [ownPinNew, setOwnPinNew] = useState('');
+  const [ownPinConfirm, setOwnPinConfirm] = useState('');
+  const [ownPinError, setOwnPinError] = useState('');
+  const [ownPinSuccess, setOwnPinSuccess] = useState(false);
 
   useEffect(() => {
     const session = getConsultantSession();
@@ -55,6 +68,10 @@ function Index() {
       return;
     }
     setConsultant(session);
+    const fullConsultant = getConsultants().find(c => c.id === session.consultantId);
+    if (fullConsultant?.mustChangePin) {
+      setMustChangePinScreen(true);
+    }
   }, [router]);
 
   // ===== Config from store =====
@@ -238,6 +255,50 @@ function Index() {
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         <div style={{ width: "28px", height: "28px", border: "3px solid rgba(147,197,253,0.25)", borderTopColor: "rgba(147,197,253,0.85)", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
         <p style={{ color: "rgba(147,197,253,0.75)", fontSize: "14px", margin: 0 }}>Verificando acesso...</p>
+      </div>
+    );
+  }
+
+  if (mustChangePinScreen) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#001f42] via-[#002B5C] to-[#003d80] p-4">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+          <div className="bg-gradient-to-r from-[#002B5C] to-[#003d80] px-6 py-6 text-center">
+            <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-white/15 mb-3">
+              <Lock className="h-6 w-6 text-white" />
+            </div>
+            <h1 className="text-lg font-bold text-white">Crie sua Senha Pessoal</h1>
+            <p className="text-blue-200 text-xs mt-1">Por segurança, defina uma senha pessoal antes de continuar.</p>
+          </div>
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            if (!isValidPin(changePinNew)) { setChangePinError('Mínimo 6 caracteres alfanuméricos, sem símbolos especiais.'); return; }
+            if (changePinNew !== changePinConfirm) { setChangePinError('As senhas não coincidem.'); return; }
+            updateConsultant(consultant!.consultantId, { pin: changePinNew, mustChangePin: false });
+            setMustChangePinScreen(false);
+            setChangePinError('');
+          }} className="p-6 space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Nova Senha</label>
+              <input type="password" value={changePinNew}
+                onChange={e => { setChangePinNew(e.target.value.replace(/[^a-zA-Z0-9]/g, '')); setChangePinError(''); }}
+                placeholder="Mín. 6 caracteres alfanuméricos"
+                maxLength={20}
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:bg-white focus:border-[#002B5C] focus:ring-2 focus:ring-blue-100" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Confirmar Senha</label>
+              <input type="password" value={changePinConfirm}
+                onChange={e => { setChangePinConfirm(e.target.value.replace(/[^a-zA-Z0-9]/g, '')); setChangePinError(''); }}
+                placeholder="Repita a nova senha"
+                maxLength={20}
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:bg-white focus:border-[#002B5C] focus:ring-2 focus:ring-blue-100" />
+            </div>
+            {changePinError && <p className="text-xs text-rose-600">{changePinError}</p>}
+            <button type="submit" disabled={changePinNew.length < 6}
+              className="w-full rounded-xl bg-[#002B5C] hover:bg-[#003d80] text-white py-3 text-sm font-bold shadow-lg transition disabled:opacity-50">Definir Minha Senha</button>
+          </form>
+        </div>
       </div>
     );
   }
@@ -479,6 +540,13 @@ function Index() {
                   {consultant.firstName} {consultant.lastName}
                 </span>
               </div>
+              <button
+                onClick={() => setChangeOwnPinOpen(true)}
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 hover:bg-white/20 px-3 py-1.5 text-xs font-medium text-white/80 transition"
+              >
+                <Lock className="h-3.5 w-3.5" />
+                Alterar Senha
+              </button>
               <button
                 onClick={() => { logoutConsultant(); router.navigate({ to: "/login" }); }}
                 title="Sair do sistema"
@@ -1085,6 +1153,70 @@ function Index() {
           </footer>
         </div>
       </div>
+
+      {changeOwnPinOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="bg-gradient-to-r from-[#002B5C] to-[#003d80] px-6 py-5 flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-white">Alterar Minha Senha</h2>
+                <p className="text-blue-200 text-xs mt-0.5">{consultant?.fullName}</p>
+              </div>
+              <button onClick={() => { setChangeOwnPinOpen(false); setOwnPinCurrent(''); setOwnPinNew(''); setOwnPinConfirm(''); setOwnPinError(''); setOwnPinSuccess(false); }} className="text-white/70 hover:text-white">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            {ownPinSuccess ? (
+              <div className="p-6 text-center">
+                <CheckCircle className="h-12 w-12 text-emerald-500 mx-auto mb-3" />
+                <p className="font-bold text-slate-800">Senha alterada com sucesso!</p>
+                <button onClick={() => { setChangeOwnPinOpen(false); setOwnPinSuccess(false); }}
+                  className="mt-4 w-full rounded-xl bg-[#002B5C] text-white py-2.5 text-sm font-bold">Fechar</button>
+              </div>
+            ) : (
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                const consultants = getConsultants();
+                const me = consultants.find(c => c.id === consultant!.consultantId);
+                if (!me || me.pin !== ownPinCurrent) { setOwnPinError('Senha atual incorreta.'); return; }
+                if (!isValidPin(ownPinNew)) { setOwnPinError('Nova senha deve ter mín. 6 caracteres alfanuméricos.'); return; }
+                if (ownPinNew !== ownPinConfirm) { setOwnPinError('As senhas não coincidem.'); return; }
+                updateConsultant(consultant!.consultantId, { pin: ownPinNew });
+                setOwnPinSuccess(true);
+              }} className="p-6 space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Senha Atual</label>
+                  <input type="password" value={ownPinCurrent} onChange={e => { setOwnPinCurrent(e.target.value); setOwnPinError(''); }}
+                    placeholder="Digite sua senha atual"
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:bg-white focus:border-[#002B5C] focus:ring-2 focus:ring-blue-100" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Nova Senha</label>
+                  <input type="password" value={ownPinNew} onChange={e => { setOwnPinNew(e.target.value.replace(/[^a-zA-Z0-9]/g, '')); setOwnPinError(''); }}
+                    placeholder="Mín. 6 caracteres alfanuméricos"
+                    maxLength={20}
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:bg-white focus:border-[#002B5C] focus:ring-2 focus:ring-blue-100" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Confirmar Nova Senha</label>
+                  <input type="password" value={ownPinConfirm} onChange={e => { setOwnPinConfirm(e.target.value.replace(/[^a-zA-Z0-9]/g, '')); setOwnPinError(''); }}
+                    placeholder="Repita a nova senha"
+                    maxLength={20}
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:bg-white focus:border-[#002B5C] focus:ring-2 focus:ring-blue-100" />
+                </div>
+                {ownPinError && <p className="text-xs text-rose-600 flex items-center gap-1.5"><AlertCircle className="h-3.5 w-3.5" />{ownPinError}</p>}
+                <div className="flex gap-3">
+                  <button type="button" onClick={() => setChangeOwnPinOpen(false)}
+                    className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition">Cancelar</button>
+                  <button type="submit"
+                    className="flex-1 rounded-xl bg-[#002B5C] hover:bg-[#003d80] text-white py-2.5 text-sm font-bold shadow-md transition">Salvar</button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

@@ -37,7 +37,7 @@ import {
 import { useIsMobile } from "../hooks/use-mobile";
 import { getConfig, saveConfig, resetConfig, generateId, SEASONS, CONFIG_UPDATED_EVENT } from "../lib/config-store";
 import type { AppConfig, Resort, Room, Season } from "../lib/config-store";
-import { getConsultants, addConsultant, toggleConsultantActive, getFullName, CONSULTANTS_UPDATED_EVENT } from "../lib/consultant-store";
+import { getConsultants, addConsultant, toggleConsultantActive, getFullName, CONSULTANTS_UPDATED_EVENT, findConsultantByCredentials, updateConsultant, isValidPin, resetUserPin } from "../lib/consultant-store";
 import type { Consultant, ConsultantRole } from "../lib/consultant-store";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
@@ -91,6 +91,13 @@ function canToggleUser(currentRole: Role, targetUser: Consultant, currentUserId:
   // Supervisor can only toggle Consultores
   if (currentRole === "Supervisor") return targetUser.role === "Consultor";
   // Consultor can't toggle anyone
+  return false;
+}
+
+function canEditUser(currentRole: Role, targetUser: Consultant, currentUserId: string): boolean {
+  if (targetUser.id === currentUserId) return false; // não pode editar a si mesmo
+  if (currentRole === 'Administrador') return true; // admin edita todos exceto si mesmo
+  if (currentRole === 'Supervisor') return targetUser.role === 'Consultor';
   return false;
 }
 
@@ -161,9 +168,11 @@ function AdminDashboardInner() {
 
   // ===== AUTH STATE =====
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(isAdminSessionValid);
+  const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState(false);
+  const [loginRoleError, setLoginRoleError] = useState(false);
   const [loginShake, setLoginShake] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -188,16 +197,6 @@ function AdminDashboardInner() {
       window.removeEventListener(CONFIG_UPDATED_EVENT, handler);
       window.removeEventListener("storage", handler);
     };
-  }, []);
-
-  // ===== AUTO-LOGIN (no server password configured) =====
-  useEffect(() => {
-    if (!isAuthenticated) {
-      // ADMIN_PASSWORD not set in Cloudflare — auto-login on mount
-      createAdminSession();
-      setIsAuthenticated(true);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ===== USERS (from consultant store — real data) =====
@@ -255,15 +254,44 @@ function AdminDashboardInner() {
   const [newRole, setNewRole] = useState<Role>("Consultor");
   const [newActive, setNewActive] = useState(true);
 
+  // ===== EDIT USER MODAL =====
+  const [editingUser, setEditingUser] = useState<Consultant | null>(null);
+  const [editFirstName, setEditFirstName] = useState('');
+  const [editLastName, setEditLastName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editRole, setEditRole] = useState<Role>('Consultor');
+  const [editActive, setEditActive] = useState(true);
+  const [editPinError, setEditPinError] = useState('');
+
+  // ===== RESET PIN MODAL =====
+  const [resetPinUser, setResetPinUser] = useState<Consultant | null>(null);
+  const [resetPinValue, setResetPinValue] = useState('');
+  const [resetPinConfirm, setResetPinConfirm] = useState('');
+  const [resetPinError, setResetPinError] = useState('');
+  const [resetPinSuccess, setResetPinSuccess] = useState('');
 
   // ===== AUTH HANDLERS =====
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!loginPassword.trim() || isPending) return;
-    // Client-side session — no server validation needed when ADMIN_PASSWORD is not set
+    if (!loginEmail.trim() || !loginPassword.trim() || isPending) return;
+
+    const c = findConsultantByCredentials(loginEmail.trim(), loginPassword.trim());
+    if (!c || (c.role !== "Administrador" && c.role !== "Supervisor")) {
+      if (c && c.role === "Consultor") {
+        setLoginRoleError(true);
+        setLoginError(false);
+      } else {
+        setLoginError(true);
+        setLoginRoleError(false);
+      }
+      return;
+    }
+
     createAdminSession();
     setIsAuthenticated(true);
+    setCurrentUserId(c.id);
     setLoginError(false);
+    setLoginRoleError(false);
     setLoginPassword("");
   };
 
@@ -272,6 +300,7 @@ function AdminDashboardInner() {
     setIsAuthenticated(false);
     setLoginPassword("");
     setLoginError(false);
+    setLoginRoleError(false);
   };
 
   // ===== HANDLERS =====
@@ -284,7 +313,7 @@ function AdminDashboardInner() {
 
   const handleAddUser = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newFirstName.trim() || !newLastName.trim() || !newEmail.trim() || newPin.length < 4) return;
+    if (!newFirstName.trim() || !newLastName.trim() || !newEmail.trim() || !isValidPin(newPin)) return;
     if (!canCreateUsers(currentUser.role)) return;
 
     const creatableRoles = getCreatableRoles(currentUser.role);
@@ -294,9 +323,10 @@ function AdminDashboardInner() {
       firstName: newFirstName.trim(),
       lastName: newLastName.trim(),
       email: newEmail.trim().toLowerCase(),
-      pin: newPin.slice(0, 6),
+      pin: newPin,
       role: roleToAssign,
       active: newActive,
+      mustChangePin: true,
     });
 
     setNewFirstName("");
@@ -306,6 +336,55 @@ function AdminDashboardInner() {
     setNewRole("Consultor");
     setNewActive(true);
     setIsAddUserOpen(false);
+  };
+
+  const openEditUser = (user: Consultant) => {
+    setEditingUser(user);
+    setEditFirstName(user.firstName);
+    setEditLastName(user.lastName);
+    setEditEmail(user.email);
+    setEditRole(user.role);
+    setEditActive(user.active);
+    setEditPinError('');
+  };
+
+  const handleEditUserSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    if (!editFirstName.trim() || !editLastName.trim() || !editEmail.trim()) return;
+    updateConsultant(editingUser.id, {
+      firstName: editFirstName.trim(),
+      lastName: editLastName.trim(),
+      email: editEmail.trim().toLowerCase(),
+      role: editRole,
+      active: editActive,
+    });
+    setEditingUser(null);
+  };
+
+  const openResetPin = (user: Consultant) => {
+    setResetPinUser(user);
+    setResetPinValue('');
+    setResetPinConfirm('');
+    setResetPinError('');
+    setResetPinSuccess('');
+  };
+
+  const handleResetPinSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetPinUser) return;
+    if (!isValidPin(resetPinValue)) {
+      setResetPinError('O PIN deve ter entre 6 e 20 caracteres alfanuméricos (sem símbolos especiais).');
+      return;
+    }
+    if (resetPinValue !== resetPinConfirm) {
+      setResetPinError('Os PINs digitados não coincidem.');
+      return;
+    }
+    resetUserPin(resetPinUser.id, resetPinValue);
+    setResetPinSuccess(`Senha resetada com sucesso! Comunique o novo PIN ao usuário e peça que ele troque no próximo acesso.`);
+    setResetPinValue('');
+    setResetPinConfirm('');
   };
 
   const handleDeleteSimulation = (id: string) => {
@@ -568,6 +647,21 @@ function AdminDashboardInner() {
             {/* Form */}
             <form onSubmit={handleLogin} className="px-8 py-8 space-y-5">
               <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">E-mail</label>
+                <div className="relative mb-4">
+                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input
+                    type="email"
+                    value={loginEmail}
+                    onChange={(e) => { setLoginEmail(e.target.value); setLoginError(false); setLoginRoleError(false); }}
+                    placeholder="seu@email.com"
+                    autoFocus
+                    className={`w-full pl-10 pr-4 py-3 rounded-xl border text-sm font-medium outline-none transition-all ${
+                      loginError ? 'border-rose-400 bg-rose-50 text-rose-800 focus:ring-2 focus:ring-rose-200'
+                      : 'border-slate-200 bg-slate-50 text-slate-800 focus:bg-white focus:border-[#002B5C] focus:ring-2 focus:ring-blue-100'
+                    }`}
+                  />
+                </div>
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
                   Senha de Acesso
                 </label>
@@ -576,9 +670,8 @@ function AdminDashboardInner() {
                   <input
                     type={showPassword ? "text" : "password"}
                     value={loginPassword}
-                    onChange={(e) => { setLoginPassword(e.target.value); setLoginError(false); }}
-                    placeholder="Digite a senha"
-                    autoFocus
+                    onChange={(e) => { setLoginPassword(e.target.value); setLoginError(false); setLoginRoleError(false); }}
+                    placeholder="PIN de acesso"
                     className={`w-full pl-10 pr-12 py-3 rounded-xl border text-sm font-medium outline-none transition-all ${
                       loginError
                         ? "border-rose-400 bg-rose-50 text-rose-800 focus:ring-2 focus:ring-rose-200"
@@ -594,17 +687,22 @@ function AdminDashboardInner() {
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
-                {loginError && (
+                {loginRoleError ? (
                   <p className="mt-2 text-xs text-rose-600 font-semibold flex items-center gap-1.5 animate-in fade-in duration-200">
                     <AlertCircle className="h-3.5 w-3.5" />
-                    Senha incorreta. Tente novamente.
+                    Acesso restrito. Seu perfil não tem permissão para o painel.
                   </p>
-                )}
+                ) : loginError ? (
+                  <p className="mt-2 text-xs text-rose-600 font-semibold flex items-center gap-1.5 animate-in fade-in duration-200">
+                    <AlertCircle className="h-3.5 w-3.5" />
+                    E-mail ou PIN incorretos. Tente novamente.
+                  </p>
+                ) : null}
               </div>
 
               <button
                 type="submit"
-                disabled={!loginPassword.trim() || isPending}
+                disabled={!loginEmail.trim() || !loginPassword.trim() || isPending}
                 className="w-full rounded-xl bg-[#002B5C] hover:bg-[#003d80] text-white py-3 text-sm font-bold shadow-lg shadow-blue-900/20 transition-all hover:shadow-xl hover:shadow-blue-900/30 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] flex items-center justify-center gap-2"
               >
                 {isPending ? (
@@ -1220,12 +1318,15 @@ function AdminDashboardInner() {
                         <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[11px] text-center">
                           Status
                         </th>
+                        <th className="p-4 font-bold text-slate-500 uppercase tracking-wider text-[11px] text-center">
+                          Ações
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {users.length === 0 ? (
                         <tr>
-                          <td colSpan={4} className="p-8 text-center text-slate-400 font-medium">
+                          <td colSpan={5} className="p-8 text-center text-slate-400 font-medium">
                             Nenhum consultor cadastrado. Clique em "Adicionar Consultor" para começar.
                           </td>
                         </tr>
@@ -1283,6 +1384,30 @@ function AdminDashboardInner() {
                                     }`}
                                   />
                                 </button>
+                              </div>
+                            </td>
+                            <td className="p-4">
+                              <div className="flex items-center justify-center gap-2">
+                                {canEditUser(currentUser.role, user, currentUserId) && (
+                                  <button
+                                    type="button"
+                                    onClick={() => openEditUser(user)}
+                                    title="Editar usuário"
+                                    className="p-1.5 rounded-lg text-slate-500 hover:bg-blue-50 hover:text-blue-700 transition"
+                                  >
+                                    <Edit3 className="h-4 w-4" />
+                                  </button>
+                                )}
+                                {currentUser.role === 'Administrador' && user.id !== currentUserId && (
+                                  <button
+                                    type="button"
+                                    onClick={() => openResetPin(user)}
+                                    title="Resetar senha"
+                                    className="p-1.5 rounded-lg text-slate-500 hover:bg-amber-50 hover:text-amber-700 transition"
+                                  >
+                                    <RotateCcw className="h-4 w-4" />
+                                  </button>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -1766,20 +1891,20 @@ function AdminDashboardInner() {
                 {/* PIN field */}
                 <div>
                   <label htmlFor="new-pin" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                    PIN de Acesso (4–6 dígitos)
+                    PIN de Acesso
                   </label>
                   <input
                     id="new-pin"
                     type="password"
-                    inputMode="numeric"
                     required
-                    minLength={4}
-                    maxLength={6}
-                    placeholder="••••••"
+                    placeholder="Mín. 6 caracteres alfanuméricos"
                     value={newPin}
-                    onChange={(e) => setNewPin(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))}
+                    onChange={(e) => setNewPin(e.target.value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20))}
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-sm font-bold tracking-widest text-slate-800 outline-none focus:bg-white focus:border-[#002B5C] focus:ring-2 focus:ring-blue-100 transition"
                   />
+                  {newPin.length > 0 && !isValidPin(newPin) && (
+                    <p className="mt-1 text-xs text-rose-600 flex items-center gap-1"><AlertCircle className="h-3 w-3" />Mínimo 6 caracteres alfanuméricos, sem símbolos especiais.</p>
+                  )}
                   <p className="text-[10px] text-slate-400 mt-1">Este PIN será usado pelo consultor para fazer login na calculadora.</p>
                 </div>
 
@@ -1858,12 +1983,130 @@ function AdminDashboardInner() {
                 </button>
                 <button
                   type="submit"
-                  disabled={!newFirstName.trim() || !newLastName.trim() || !newEmail.trim() || newPin.length < 4}
+                  disabled={!newFirstName.trim() || !newLastName.trim() || !newEmail.trim() || !isValidPin(newPin)}
                   className="rounded-lg bg-[#002B5C] hover:opacity-90 px-4 py-2 text-xs font-semibold text-white shadow-sm transition disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Cadastrar Consultor
                 </button>
               </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== MODAL: EDITAR USUÁRIO ==================== */}
+      {editingUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="bg-gradient-to-r from-[#002B5C] to-[#003d80] px-6 py-5 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-white">Editar Usuário</h2>
+                <p className="text-blue-200 text-xs mt-0.5">{editingUser.firstName} {editingUser.lastName}</p>
+              </div>
+              <button onClick={() => setEditingUser(null)} className="text-white/70 hover:text-white transition">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <form onSubmit={handleEditUserSave} className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Nome</label>
+                  <input type="text" value={editFirstName} onChange={e => setEditFirstName(e.target.value)} required
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:bg-white focus:border-[#002B5C] focus:ring-2 focus:ring-blue-100" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Sobrenome</label>
+                  <input type="text" value={editLastName} onChange={e => setEditLastName(e.target.value)} required
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:bg-white focus:border-[#002B5C] focus:ring-2 focus:ring-blue-100" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">E-mail</label>
+                <input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)} required
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:bg-white focus:border-[#002B5C] focus:ring-2 focus:ring-blue-100" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Cargo</label>
+                  <select value={editRole} onChange={e => setEditRole(e.target.value as Role)}
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:bg-white focus:border-[#002B5C] focus:ring-2 focus:ring-blue-100">
+                    {getCreatableRoles(currentUser.role).map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Status</label>
+                  <select value={editActive ? 'ativo' : 'inativo'} onChange={e => setEditActive(e.target.value === 'ativo')}
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:bg-white focus:border-[#002B5C] focus:ring-2 focus:ring-blue-100">
+                    <option value="ativo">Ativo</option>
+                    <option value="inativo">Inativo</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setEditingUser(null)}
+                  className="flex-1 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition">Cancelar</button>
+                <button type="submit"
+                  className="flex-1 rounded-xl bg-[#002B5C] hover:bg-[#003d80] text-white py-2.5 text-sm font-bold shadow-md transition">Salvar Alterações</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== MODAL: RESETAR PIN ==================== */}
+      {resetPinUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="bg-gradient-to-r from-amber-600 to-amber-700 px-6 py-5 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-white">Resetar Senha</h2>
+                <p className="text-amber-100 text-xs mt-0.5">{resetPinUser.firstName} {resetPinUser.lastName}</p>
+              </div>
+              <button onClick={() => setResetPinUser(null)} className="text-white/70 hover:text-white transition">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <form onSubmit={handleResetPinSave} className="p-6 space-y-4">
+              {resetPinSuccess ? (
+                <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4">
+                  <p className="text-sm font-semibold text-emerald-800 flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4" /> {resetPinSuccess}
+                  </p>
+                  <button type="button" onClick={() => setResetPinUser(null)}
+                    className="mt-3 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 text-sm font-bold transition">Fechar</button>
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Novo PIN Temporário</label>
+                    <input type="text" value={resetPinValue}
+                      onChange={e => { setResetPinValue(e.target.value.replace(/[^a-zA-Z0-9]/g, '')); setResetPinError(''); }}
+                      placeholder="Mín. 6 caracteres alfanuméricos"
+                      maxLength={20}
+                      className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-100" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Confirmar Novo PIN</label>
+                    <input type="text" value={resetPinConfirm}
+                      onChange={e => { setResetPinConfirm(e.target.value.replace(/[^a-zA-Z0-9]/g, '')); setResetPinError(''); }}
+                      placeholder="Repita o novo PIN"
+                      maxLength={20}
+                      className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-100" />
+                  </div>
+                  {resetPinError && (
+                    <p className="text-xs text-rose-600 flex items-center gap-1.5"><AlertCircle className="h-3.5 w-3.5" />{resetPinError}</p>
+                  )}
+                  <p className="text-xs text-slate-500 bg-amber-50 border border-amber-100 rounded-lg p-3">
+                    ⚠️ O usuário será obrigado a trocar o PIN no próximo acesso.
+                  </p>
+                  <div className="flex gap-3 pt-2">
+                    <button type="button" onClick={() => setResetPinUser(null)}
+                      className="flex-1 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition">Cancelar</button>
+                    <button type="submit" disabled={resetPinValue.length < 6}
+                      className="flex-1 rounded-xl bg-amber-600 hover:bg-amber-700 text-white py-2.5 text-sm font-bold shadow-md transition disabled:opacity-50">Resetar Senha</button>
+                  </div>
+                </>
+              )}
             </form>
           </div>
         </div>

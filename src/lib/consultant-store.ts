@@ -14,6 +14,7 @@ export type Consultant = {
   role: ConsultantRole;
   active: boolean;
   createdAt: string;
+  mustChangePin?: boolean;
 };
 
 export const CONSULTANTS_KEY = "timeshare:consultants";
@@ -31,6 +32,7 @@ const DEFAULT_CONSULTANTS: Consultant[] = [
     role: "Administrador",
     active: true,
     createdAt: new Date(0).toISOString(),
+    mustChangePin: false,
   },
 ];
 
@@ -109,6 +111,14 @@ export function findConsultantByCredentials(
         c.active
     ) ?? null
   );
+}
+
+export function isValidPin(pin: string): boolean {
+  return /^[a-zA-Z0-9]{6,20}$/.test(pin);
+}
+
+export function resetUserPin(id: string, newPin: string): void {
+  updateConsultant(id, { pin: newPin, mustChangePin: true });
 }
 
 // ===== UTILS =====
