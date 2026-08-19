@@ -1,12 +1,12 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Calculator, Calendar, Users, Sparkles, Info, AlertCircle, AlertTriangle, Printer, RotateCw, History, Check, X, Trash2, BarChart3, ArrowRight, LogOut, CheckCircle } from "lucide-react";
+import { Calculator, Calendar, Users, Sparkles, Info, AlertCircle, AlertTriangle, Printer, RotateCw, History, Check, X, Trash2, BarChart3, ArrowRight, LogOut, CheckCircle, Eye, EyeOff, Lock } from "lucide-react";
 import { getConfig, CONFIG_UPDATED_EVENT, SEASONS } from "../lib/config-store";
 import type { AppConfig, Resort, Season } from "../lib/config-store";
 import { getConsultantSession, logoutConsultant } from "../lib/consultant-auth";
 import type { ConsultantSession } from "../lib/consultant-auth";
 import { getConsultants, updateConsultant, isValidPin } from "../lib/consultant-store";
-import { Lock } from "lucide-react";
+
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -53,6 +53,8 @@ function Index() {
   const [changePinNew, setChangePinNew] = useState('');
   const [changePinConfirm, setChangePinConfirm] = useState('');
   const [changePinError, setChangePinError] = useState('');
+  const [showChangePinNew, setShowChangePinNew] = useState(false);
+  const [showChangePinConfirm, setShowChangePinConfirm] = useState(false);
 
   const [changeOwnPinOpen, setChangeOwnPinOpen] = useState(false);
   const [ownPinCurrent, setOwnPinCurrent] = useState('');
@@ -260,6 +262,9 @@ function Index() {
   }
 
   if (mustChangePinScreen) {
+    const pinsMatch = changePinNew.length >= 6 && changePinConfirm.length > 0 && changePinNew === changePinConfirm;
+    const pinsNoMatch = changePinConfirm.length > 0 && changePinNew !== changePinConfirm;
+
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#001f42] via-[#002B5C] to-[#003d80] p-4">
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
@@ -278,30 +283,78 @@ function Index() {
             setMustChangePinScreen(false);
             setChangePinError('');
           }} className="p-6 space-y-4">
+            {/* Nova Senha */}
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Nova Senha</label>
-              <input type="password" value={changePinNew}
-                onChange={e => { setChangePinNew(e.target.value.replace(/[^a-zA-Z0-9]/g, '')); setChangePinError(''); }}
-                placeholder="Mín. 6 caracteres alfanuméricos"
-                maxLength={20}
-                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:bg-white focus:border-[#002B5C] focus:ring-2 focus:ring-blue-100" />
+              <div className="relative">
+                <input
+                  type={showChangePinNew ? "text" : "password"}
+                  value={changePinNew}
+                  onChange={e => { setChangePinNew(e.target.value.replace(/[^a-zA-Z0-9]/g, '')); setChangePinError(''); }}
+                  placeholder="Mín. 6 caracteres alfanuméricos"
+                  maxLength={20}
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 pr-10 text-sm outline-none focus:bg-white focus:border-[#002B5C] focus:ring-2 focus:ring-blue-100"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowChangePinNew(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition"
+                  tabIndex={-1}
+                >
+                  {showChangePinNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
+
+            {/* Confirmar Senha */}
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Confirmar Senha</label>
-              <input type="password" value={changePinConfirm}
-                onChange={e => { setChangePinConfirm(e.target.value.replace(/[^a-zA-Z0-9]/g, '')); setChangePinError(''); }}
-                placeholder="Repita a nova senha"
-                maxLength={20}
-                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:bg-white focus:border-[#002B5C] focus:ring-2 focus:ring-blue-100" />
+              <div className="relative">
+                <input
+                  type={showChangePinConfirm ? "text" : "password"}
+                  value={changePinConfirm}
+                  onChange={e => { setChangePinConfirm(e.target.value.replace(/[^a-zA-Z0-9]/g, '')); setChangePinError(''); }}
+                  placeholder="Repita a nova senha"
+                  maxLength={20}
+                  className={`w-full rounded-lg border bg-slate-50 px-3 py-2.5 pr-10 text-sm outline-none focus:bg-white focus:ring-2 transition ${
+                    pinsMatch
+                      ? 'border-emerald-400 focus:border-emerald-500 focus:ring-emerald-100'
+                      : pinsNoMatch
+                      ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-100'
+                      : 'border-slate-200 focus:border-[#002B5C] focus:ring-blue-100'
+                  }`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowChangePinConfirm(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition"
+                  tabIndex={-1}
+                >
+                  {showChangePinConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              {/* Indicador de coincidência */}
+              {pinsMatch && (
+                <p className="mt-1.5 text-xs text-emerald-600 flex items-center gap-1">
+                  <Check className="h-3.5 w-3.5" /> As senhas coincidem.
+                </p>
+              )}
+              {pinsNoMatch && (
+                <p className="mt-1.5 text-xs text-rose-600 flex items-center gap-1">
+                  <AlertCircle className="h-3.5 w-3.5" /> As senhas não coincidem.
+                </p>
+              )}
             </div>
+
             {changePinError && <p className="text-xs text-rose-600">{changePinError}</p>}
-            <button type="submit" disabled={changePinNew.length < 6}
+            <button type="submit" disabled={!pinsMatch}
               className="w-full rounded-xl bg-[#002B5C] hover:bg-[#003d80] text-white py-3 text-sm font-bold shadow-lg transition disabled:opacity-50">Definir Minha Senha</button>
           </form>
         </div>
       </div>
     );
   }
+
 
   return (
     <div className="min-h-screen bg-slate-50">
