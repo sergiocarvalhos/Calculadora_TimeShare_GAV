@@ -863,64 +863,13 @@ function AdminDashboardInner() {
             </h1>
           </div>
 
-          {/* PROFILE SELECTOR */}
-          <div className="relative">
-            <button
-              onClick={() => setProfileMenuOpen(!profileMenuOpen)}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-xs font-semibold cursor-pointer ${roleStyles.bg} ${roleStyles.text} ${roleStyles.border} hover:shadow-md`}
-            >
-              {getRoleIcon(currentUser.role)}
-              <span className="hidden sm:inline max-w-[140px] truncate">{getFullName(currentUser) || currentUser.email?.split("@")[0] || "Admin"}</span>
-              <span className="sm:hidden">{currentUser.role.slice(0, 3)}</span>
-              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${profileMenuOpen ? "rotate-180" : ""}`} />
-            </button>
-
-            {/* Profile dropdown */}
-            {profileMenuOpen && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setProfileMenuOpen(false)} />
-                <div className="absolute right-0 top-full mt-2 z-50 w-72 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-                  <div className="px-4 py-3 bg-slate-50 border-b border-slate-100">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                      Simular Perfil de Acesso
-                    </p>
-                  </div>
-                  <div className="py-1">
-                    {users
-                      .filter((u) => u.active)
-                      .map((user) => {
-                        const styles = getRoleBadgeStyles(user.role);
-                        const isSelected = user.id === currentUserId;
-                        return (
-                          <button
-                            key={user.id}
-                            onClick={() => handleSwitchProfile(user.id)}
-                            className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                              isSelected ? "bg-blue-50" : "hover:bg-slate-50"
-                            }`}
-                          >
-                            <div
-                              className={`h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 ${styles.bg} ${styles.text}`}
-                            >
-                              {getRoleIcon(user.role)}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-xs font-semibold text-slate-800 truncate">{user.firstName} {user.lastName}</p>
-                              <p className="text-[10px] text-slate-500 truncate">{user.email}</p>
-                              <p className={`text-[10px] font-bold ${styles.text}`}>{user.role}</p>
-                            </div>
-                            {isSelected && (
-                              <span className="text-[10px] font-bold text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">
-                                Ativo
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
-                  </div>
-                </div>
-              </>
-            )}
+          {/* CURRENT USER BADGE (read-only — no profile switching) */}
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-semibold ${roleStyles.bg} ${roleStyles.text} ${roleStyles.border}`}>
+            {getRoleIcon(currentUser.role)}
+            <span className="hidden sm:inline max-w-[160px] truncate">
+              {getFullName(currentUser) || currentUser.email?.split("@")[0] || "Admin"}
+            </span>
+            <span className="sm:hidden">{currentUser.role.slice(0, 3)}</span>
           </div>
 
           {/* LOGOUT BUTTON */}
