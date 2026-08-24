@@ -1324,13 +1324,21 @@ function AdminDashboardInner() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {users.length === 0 ? (
-                        <tr>
-                          <td colSpan={5} className="p-8 text-center text-slate-400 font-medium">
-                            Nenhum consultor cadastrado. Clique em "Adicionar Consultor" para começar.
-                          </td>
-                        </tr>
-                      ) : users.map((user) => {
+                      {(() => {
+                        // Filtro de visibilidade por perfil
+                        const visibleUsers = currentUser.role === "Administrador"
+                          ? users
+                          : currentUser.role === "Supervisor"
+                          ? users.filter(u => u.role !== "Administrador")
+                          : users.filter(u => u.id === currentUserId); // Consultor vê só ele mesmo
+
+                        return visibleUsers.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="p-8 text-center text-slate-400 font-medium">
+                              Nenhum consultor cadastrado. Clique em "Adicionar Consultor" para começar.
+                            </td>
+                          </tr>
+                        ) : visibleUsers.map((user) => {
                         const canToggle = canToggleUser(currentUser.role, user, currentUserId);
                         const badgeStyles = getRoleBadgeStyles(user.role);
 
@@ -1412,7 +1420,7 @@ function AdminDashboardInner() {
                             </td>
                           </tr>
                         );
-                      })}
+                      })})()} 
                     </tbody>
                   </table>
                 </div>
