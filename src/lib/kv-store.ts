@@ -24,9 +24,8 @@ const KV_KEY = "consultants_v1";
  */
 async function getKV(): Promise<KVNamespace | null> {
   try {
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore — cloudflare:workers is a virtual module (no TS types in local dev)
-    const m = await import("cloudflare:workers");
+    // @ts-ignore — cloudflare:workers is a virtual module; @vite-ignore prevents Vite from bundling it
+    const m = await import(/* @vite-ignore */ "cloudflare:workers");
     const env = (m as unknown as { env?: Record<string, unknown> }).env ?? {};
     const kv = env["TIMESHARE_DATA"];
     if (kv && typeof (kv as KVNamespace).get === "function") {

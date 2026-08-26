@@ -37,9 +37,8 @@ import {
 import { useIsMobile } from "../hooks/use-mobile";
 import { getConfig, saveConfig, resetConfig, generateId, SEASONS, CONFIG_UPDATED_EVENT } from "../lib/config-store";
 import type { AppConfig, Resort, Room, Season } from "../lib/config-store";
-import { getConsultants, addConsultant, toggleConsultantActive, getFullName, CONSULTANTS_UPDATED_EVENT, findConsultantByCredentials, updateConsultant, isValidPin, resetUserPin, syncConsultantsFromKV } from "../lib/consultant-store";
+import { getConsultants, addConsultant, toggleConsultantActive, getFullName, CONSULTANTS_UPDATED_EVENT, findConsultantByCredentials, updateConsultant, isValidPin, resetUserPin, syncConsultantsFromKV, forcePushConsultantsToKV } from "../lib/consultant-store";
 import type { Consultant, ConsultantRole } from "../lib/consultant-store";
-import { saveConsultantsToKV } from "../lib/kv-store";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer,
@@ -1263,8 +1262,7 @@ function AdminDashboardInner() {
                           setKvSyncing(true);
                           setKvSyncStatus(null);
                           try {
-                            const list = getConsultants();
-                            const result = await saveConsultantsToKV({ data: list });
+                            const result = await forcePushConsultantsToKV();
                             setKvSyncStatus(result.ok ? "ok" : "error");
                           } catch {
                             setKvSyncStatus("error");
