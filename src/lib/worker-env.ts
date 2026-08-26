@@ -1,20 +1,18 @@
 // ===== WORKER ENV STORE =====
-// Stores the Cloudflare Worker env (bindings: KV, D1, secrets, etc.)
-// in a module-level variable so it can be accessed from server functions.
+// Uses globalThis to store the Cloudflare Worker env across all module bundles.
 //
-// setWorkerEnv() is called once per request in server.ts (before TanStack handles it).
-// getWorkerEnv() is called from kv-store.ts server functions to access KV bindings.
-//
-// This pattern is necessary because TanStack Start server functions do not natively
-// expose the Cloudflare Worker env — only the main fetch handler receives it.
+// Module-level variables fail because TanStack Start compiles server functions
+// into a separate chunk from server.ts — they get different module instances.
+// globalThis is the true global of the V8 isolate and is shared by all chunks.
 
-let _env: unknown = null;
+const ENV_KEY = "__TIMESHARE_CF_ENV__";
 
 export function setWorkerEnv(env: unknown): void {
-  _env = env;
+  (globalThis as Record<string, unknown>)[ENV_KEY] = env;
 }
 
 export function getWorkerEnv(): Record<string, unknown> | null {
-  if (!_env || typeof _env !== "object") return null;
-  return _env as Record<string, unknown>;
+  const env = (globalThis as Record<string, unknown>)[ENV_KEY];
+  if (!env || typeof env !== "object") return null;
+  return env as Record<string, unknown>;
 }
