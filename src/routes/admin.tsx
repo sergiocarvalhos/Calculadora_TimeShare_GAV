@@ -39,6 +39,7 @@ import { getConfig, saveConfig, resetConfig, generateId, SEASONS, CONFIG_UPDATED
 import type { AppConfig, Resort, Room, Season } from "../lib/config-store";
 import { getConsultants, addConsultant, toggleConsultantActive, getFullName, CONSULTANTS_UPDATED_EVENT, findConsultantByCredentials, updateConsultant, isValidPin, resetUserPin, syncConsultantsFromKV } from "../lib/consultant-store";
 import type { Consultant, ConsultantRole } from "../lib/consultant-store";
+import { saveConsultantsToKV } from "../lib/kv-store";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer,
@@ -179,6 +180,8 @@ function AdminDashboardInner() {
   // ===== CONFIG STATE =====
   const [config, setConfig] = useState<AppConfig>(getConfig);
   const [configSaved, setConfigSaved] = useState(false);
+  const [kvSyncing, setKvSyncing] = useState(false);
+  const [kvSyncStatus, setKvSyncStatus] = useState<"ok" | "error" | null>(null);
   const [editingResortId, setEditingResortId] = useState<string | null>(null);
   const [addResortOpen, setAddResortOpen] = useState(false);
   const [newResortName, setNewResortName] = useState("");
@@ -1237,9 +1240,51 @@ function AdminDashboardInner() {
                 </div>
               )}
 
-              {/* TOP HEADER BUTTON */}
+              {/* TOP HEADER BUTTONS */}
               {canCreateUsers(currentUser.role) && (
-                <div className="flex justify-end">
+                <div className="flex items-center justify-end gap-3 flex-wrap">
+                  {/* KV SYNC BUTTON — Admins only */}
+                  {currentUser.role === "Administrador" && (
+                    <div className="flex items-center gap-2">
+                      {kvSyncStatus === "ok" && (
+                        <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
+                          <CheckCircle className="h-3.5 w-3.5" /> Sincronizado!
+                        </span>
+                      )}
+                      {kvSyncStatus === "error" && (
+                        <span className="text-xs font-semibold text-red-500 flex items-center gap-1">
+                          ✕ Falha ao sincronizar
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        disabled={kvSyncing}
+                        onClick={async () => {
+                          setKvSyncing(true);
+                          setKvSyncStatus(null);
+                          try {
+                            const list = getConsultants();
+                            const result = await saveConsultantsToKV({ data: list });
+                            setKvSyncStatus(result.ok ? "ok" : "error");
+                          } catch {
+                            setKvSyncStatus("error");
+                          } finally {
+                            setKvSyncing(false);
+                            setTimeout(() => setKvSyncStatus(null), 5000);
+                          }
+                        }}
+                        className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition disabled:opacity-50"
+                      >
+                        {kvSyncing ? (
+                          <span className="animate-spin">⟳</span>
+                        ) : (
+                          <span>☁</span>
+                        )}
+                        {kvSyncing ? "Sincronizando..." : "Sincronizar com a Nuvem"}
+                      </button>
+                    </div>
+                  )}
+
                   <button
                     type="button"
                     onClick={() => {
