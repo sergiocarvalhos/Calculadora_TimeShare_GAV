@@ -11,6 +11,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { loginConsultant, getConsultantSession } from "../lib/consultant-auth";
+import { syncConsultantsFromKV } from "../lib/consultant-store";
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
@@ -35,14 +36,21 @@ function LoginPage() {
   const [shake, setShake] = useState(false);
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [syncing, setSyncing] = useState(true);
 
-  // SSR-safe mount + session check
+  // SSR-safe mount + KV sync + session check
   useEffect(() => {
     setMounted(true);
     const session = getConsultantSession();
     if (session) {
       router.navigate({ to: "/" });
+      return;
     }
+    // Sync consultant list from Cloudflare KV so any device can log in
+    // with accounts created on other devices/admin panels.
+    syncConsultantsFromKV()
+      .catch(() => {})
+      .finally(() => setSyncing(false));
   }, [router]);
 
   const handlePinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -71,7 +79,7 @@ function LoginPage() {
     }, 300);
   };
 
-  if (!mounted) return null;
+  if (!mounted || syncing) return null;
 
   return (
     <div

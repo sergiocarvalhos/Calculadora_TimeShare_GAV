@@ -55,10 +55,50 @@ export function saveConsultants(list: Consultant[]): void {
   try {
     localStorage.setItem(CONSULTANTS_KEY, JSON.stringify(list));
     window.dispatchEvent(new CustomEvent(CONSULTANTS_UPDATED_EVENT));
+    // Fire-and-forget KV push — syncs data to Cloudflare KV so all devices stay in sync.
+    // In local dev (no KV binding), this silently does nothing.
+    void pushConsultantsToKV(list);
   } catch {
     // ignore quota errors
   }
 }
+
+// ===== KV SYNC =====
+
+/**
+ * Fetches the consultant list from Cloudflare KV and writes it to localStorage.
+ * Call this on app mount so any device gets the latest data from the shared KV store.
+ * Returns true if KV had data and localStorage was updated, false otherwise.
+ */
+export async function syncConsultantsFromKV(): Promise<boolean> {
+  try {
+    const { getConsultantsFromKV } = await import("./kv-store");
+    const kvData = await getConsultantsFromKV();
+    if (kvData && kvData.length > 0) {
+      localStorage.setItem(CONSULTANTS_KEY, JSON.stringify(kvData));
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent(CONSULTANTS_UPDATED_EVENT));
+      }
+      return true;
+    }
+  } catch {
+    // KV unavailable (local dev or network error) — use localStorage fallback
+  }
+  return false;
+}
+
+/**
+ * Pushes the current consultant list to Cloudflare KV.
+ * Fire-and-forget — failures are silently swallowed.
+ */
+export function pushConsultantsToKV(list: Consultant[]): void {
+  import("./kv-store")
+    .then(({ saveConsultantsToKV }) => {
+      saveConsultantsToKV({ data: list }).catch(() => {});
+    })
+    .catch(() => {});
+}
+
 
 // ===== CRUD =====
 export function addConsultant(

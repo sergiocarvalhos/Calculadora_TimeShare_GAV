@@ -37,7 +37,7 @@ import {
 import { useIsMobile } from "../hooks/use-mobile";
 import { getConfig, saveConfig, resetConfig, generateId, SEASONS, CONFIG_UPDATED_EVENT } from "../lib/config-store";
 import type { AppConfig, Resort, Room, Season } from "../lib/config-store";
-import { getConsultants, addConsultant, toggleConsultantActive, getFullName, CONSULTANTS_UPDATED_EVENT, findConsultantByCredentials, updateConsultant, isValidPin, resetUserPin } from "../lib/consultant-store";
+import { getConsultants, addConsultant, toggleConsultantActive, getFullName, CONSULTANTS_UPDATED_EVENT, findConsultantByCredentials, updateConsultant, isValidPin, resetUserPin, syncConsultantsFromKV } from "../lib/consultant-store";
 import type { Consultant, ConsultantRole } from "../lib/consultant-store";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
@@ -203,7 +203,12 @@ function AdminDashboardInner() {
   const [users, setUsers] = useState<Consultant[]>([]);
 
   useEffect(() => {
-    setUsers(getConsultants());
+    // Sync from KV first so this device gets the latest consultant list,
+    // then load from localStorage (which was just updated by the sync).
+    syncConsultantsFromKV()
+      .catch(() => {})
+      .finally(() => setUsers(getConsultants()));
+
     const handler = () => setUsers(getConsultants());
     window.addEventListener(CONSULTANTS_UPDATED_EVENT, handler);
     window.addEventListener("storage", handler);
@@ -212,6 +217,7 @@ function AdminDashboardInner() {
       window.removeEventListener("storage", handler);
     };
   }, []);
+
 
   // ===== CURRENT USER (profile switcher — defaults to first Administrador) =====
   const [currentUserId, setCurrentUserId] = useState("");

@@ -4,4 +4,10 @@
   "compatibility_date": "2025-09-24",
   "compatibility_flags": ["nodejs_compat"],
   "main": "src/server.ts",
+  "kv_namespaces": [
+    {
+      "binding": "TIMESHARE_DATA",
+      "id": "f43d58ff650f4bc6beec4d0c4965c081"
+    }
+  ]
 }
