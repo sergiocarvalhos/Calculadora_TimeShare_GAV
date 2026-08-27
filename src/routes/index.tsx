@@ -448,7 +448,7 @@ function Index() {
           /* ── RESUMO (saldo / pontos) ── */
           .print-summary {
             display: grid !important;
-            grid-template-columns: 1fr 1fr !important;
+            grid-template-columns: 1fr 1fr 1fr !important;
             gap: 2mm !important;
             margin: 0 !important;
           }
@@ -824,7 +824,16 @@ function Index() {
                 </div>
               </section>
               {/* Summary */}
-              <section className="print-summary mb-8 grid gap-4 sm:grid-cols-2">
+              <section className="print-summary mb-8 grid gap-4 sm:grid-cols-3">
+                {/* Saldo em Reais */}
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 shadow-sm">
+                  <div className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-emerald-700">
+                    💰 Saldo de Reaproveitamento
+                  </div>
+                  <div className="text-4xl font-bold text-emerald-800">{formatBRL(computedBalance ?? 0)}</div>
+                  <div className="mt-2 text-xs text-emerald-600">valor disponível para conversão</div>
+                </div>
+                {/* Total de Pontos */}
                 <div
                   className="rounded-2xl p-6 text-white shadow-xl shadow-blue-900/20"
                   style={{ background: "linear-gradient(135deg, #002B5C 0%, #003d7a 100%)" }}
@@ -836,6 +845,7 @@ function Index() {
                     Proposta elegível
                   </div>
                 </div>
+                {/* Validade */}
                 <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                   <div className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-slate-500">
                     <Calendar className="h-3.5 w-3.5" />
@@ -1197,12 +1207,18 @@ function Index() {
 
           {/* Footer notice */}
           <footer className="mt-12 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-            <div className="flex items-start gap-2">
+            <div className="flex items-start gap-2 mb-2">
               <Info className="mt-0.5 h-4 w-4 flex-shrink-0" />
               <p>
-                <strong>Aviso importante:</strong> Crianças, independentemente da idade, contam como hóspedes para o limite de capacidade do apartamento. Reservas exigem o mínimo de 2 diárias.
+                <strong>Avisos importantes:</strong>
               </p>
             </div>
+            <ul className="ml-6 space-y-1 list-disc text-[13px] leading-relaxed">
+              <li>Crianças, independentemente da idade, contam como hóspedes para o limite de capacidade do apartamento. Reservas exigem o mínimo de 2 diárias.</li>
+              <li>O número de diárias apresentado é uma <strong>estimativa média de utilização</strong>, podendo variar conforme a temporada e disponibilidade.</li>
+              <li>As opções de hospedagem listadas <strong>não são cumulativas</strong> — cada linha representa uma alternativa independente de uso dos pontos.</li>
+              <li>Esta proposta tem <strong>validade de 3 (três) dias úteis</strong> a partir da data de emissão.</li>
+            </ul>
           </footer>
         </div>
       </div>
