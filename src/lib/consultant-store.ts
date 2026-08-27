@@ -103,14 +103,14 @@ export function pushConsultantsToKV(list: Consultant[]): void {
  * Explicitly pushes the consultant list to KV and returns the result.
  * Used by the admin "Sync to Cloud" button to show success/error feedback.
  */
-export async function forcePushConsultantsToKV(): Promise<{ ok: boolean }> {
+export async function forcePushConsultantsToKV(): Promise<{ ok: boolean; debug?: string }> {
   try {
     const { saveConsultantsToKV } = await import("./kv-store");
     const list = getConsultants();
     const result = await saveConsultantsToKV({ data: list });
     return result;
-  } catch {
-    return { ok: false };
+  } catch (e) {
+    return { ok: false, debug: `client_catch: ${String(e)}` };
   }
 }
 

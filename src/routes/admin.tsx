@@ -180,7 +180,7 @@ function AdminDashboardInner() {
   const [config, setConfig] = useState<AppConfig>(getConfig);
   const [configSaved, setConfigSaved] = useState(false);
   const [kvSyncing, setKvSyncing] = useState(false);
-  const [kvSyncStatus, setKvSyncStatus] = useState<"ok" | "error" | null>(null);
+  const [kvSyncStatus, setKvSyncStatus] = useState<string | null>(null);
   const [editingResortId, setEditingResortId] = useState<string | null>(null);
   const [addResortOpen, setAddResortOpen] = useState(false);
   const [newResortName, setNewResortName] = useState("");
@@ -1250,9 +1250,9 @@ function AdminDashboardInner() {
                           <CheckCircle className="h-3.5 w-3.5" /> Sincronizado!
                         </span>
                       )}
-                      {kvSyncStatus === "error" && (
-                        <span className="text-xs font-semibold text-red-500 flex items-center gap-1">
-                          ✕ Falha ao sincronizar
+                      {kvSyncStatus !== null && kvSyncStatus !== "ok" && (
+                        <span className="text-xs font-semibold text-red-500 flex items-center gap-1" title={kvSyncStatus}>
+                          ✕ Falha: {kvSyncStatus}
                         </span>
                       )}
                       <button
@@ -1263,12 +1263,16 @@ function AdminDashboardInner() {
                           setKvSyncStatus(null);
                           try {
                             const result = await forcePushConsultantsToKV();
-                            setKvSyncStatus(result.ok ? "ok" : "error");
-                          } catch {
-                            setKvSyncStatus("error");
+                            if (result.ok) {
+                              setKvSyncStatus("ok");
+                            } else {
+                              setKvSyncStatus(result.debug || "unknown_error");
+                            }
+                          } catch (e) {
+                            setKvSyncStatus(`catch: ${String(e)}`);
                           } finally {
                             setKvSyncing(false);
-                            setTimeout(() => setKvSyncStatus(null), 5000);
+                            setTimeout(() => setKvSyncStatus(null), 15000);
                           }
                         }}
                         className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition disabled:opacity-50"
