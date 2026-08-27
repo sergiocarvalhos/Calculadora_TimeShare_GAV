@@ -151,8 +151,20 @@ function isAdminSessionValid(): boolean {
   }
 }
 
-function createAdminSession(): void {
-  localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ ts: Date.now() }));
+function createAdminSession(userId: string): void {
+  localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({ ts: Date.now(), userId }));
+}
+
+function getSessionUserId(): string {
+  try {
+    const raw = localStorage.getItem(ADMIN_SESSION_KEY);
+    if (!raw) return "";
+    const parsed = JSON.parse(raw) as { ts: number; userId?: string };
+    if (Date.now() - parsed.ts >= SESSION_DURATION_MS) return "";
+    return parsed.userId ?? "";
+  } catch {
+    return "";
+  }
 }
 
 function clearAdminSession(): void {
@@ -221,8 +233,8 @@ function AdminDashboardInner() {
   }, []);
 
 
-  // ===== CURRENT USER (profile switcher — defaults to first Administrador) =====
-  const [currentUserId, setCurrentUserId] = useState("");
+  // ===== CURRENT USER (persisted in admin session — survives page refresh) =====
+  const [currentUserId, setCurrentUserId] = useState(() => getSessionUserId());
   const defaultAdminUser: Consultant = {
     id: "admin-default",
     firstName: "Admin",
@@ -295,7 +307,7 @@ function AdminDashboardInner() {
       return;
     }
 
-    createAdminSession();
+    createAdminSession(c.id);
     setIsAuthenticated(true);
     setCurrentUserId(c.id);
     setLoginError(false);
