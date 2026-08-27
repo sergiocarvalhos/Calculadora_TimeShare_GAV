@@ -63,7 +63,7 @@ export function saveConsultants(list: Consultant[]): void {
   }
 }
 
-// ===== KV SYNC =====
+// ===== KV SYNC (via /api/kv/consultants — direct Worker API) =====
 
 /**
  * Fetches the consultant list from Cloudflare KV and writes it to localStorage.
@@ -72,10 +72,10 @@ export function saveConsultants(list: Consultant[]): void {
  */
 export async function syncConsultantsFromKV(): Promise<boolean> {
   try {
-    const { getConsultantsFromKV } = await import("./kv-store");
-    const kvData = await getConsultantsFromKV();
-    if (kvData && kvData.length > 0) {
-      localStorage.setItem(CONSULTANTS_KEY, JSON.stringify(kvData));
+    const res = await fetch("/api/kv/consultants");
+    const json = await res.json() as { ok: boolean; data: Consultant[] | null };
+    if (json.ok && json.data && json.data.length > 0) {
+      localStorage.setItem(CONSULTANTS_KEY, JSON.stringify(json.data));
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent(CONSULTANTS_UPDATED_EVENT));
       }
@@ -92,11 +92,11 @@ export async function syncConsultantsFromKV(): Promise<boolean> {
  * Fire-and-forget — failures are silently swallowed.
  */
 export function pushConsultantsToKV(list: Consultant[]): void {
-  import("./kv-store")
-    .then(({ saveConsultantsToKV }) => {
-      saveConsultantsToKV({ data: list }).catch(() => {});
-    })
-    .catch(() => {});
+  fetch("/api/kv/consultants", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(list),
+  }).catch(() => {});
 }
 
 /**
@@ -105,12 +105,16 @@ export function pushConsultantsToKV(list: Consultant[]): void {
  */
 export async function forcePushConsultantsToKV(): Promise<{ ok: boolean; debug?: string }> {
   try {
-    const { saveConsultantsToKV } = await import("./kv-store");
     const list = getConsultants();
-    const result = await saveConsultantsToKV({ data: list });
-    return result;
+    const res = await fetch("/api/kv/consultants", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(list),
+    });
+    const json = await res.json() as { ok: boolean; debug?: string };
+    return json;
   } catch (e) {
-    return { ok: false, debug: `client_catch: ${String(e)}` };
+    return { ok: false, debug: `fetch_error: ${String(e)}` };
   }
 }
 

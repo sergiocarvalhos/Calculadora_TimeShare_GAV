@@ -67,10 +67,69 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
   return brandedErrorResponse();
 }
 
+// ===== KV API ROUTES =====
+// Direct API endpoints for reading/writing to Cloudflare KV.
+// These run inside the Worker fetch handler where env (and KV bindings) are directly available.
+// Much more reliable than createServerFn which has bundling issues with dynamic imports.
+
+type KVNamespace = {
+  get(key: string): Promise<string | null>;
+  put(key: string, value: string): Promise<void>;
+};
+
+const KV_KEY = "consultants_v1";
+
+function getKVFromEnv(env: unknown): KVNamespace | null {
+  if (!env || typeof env !== "object") return null;
+  const kv = (env as Record<string, unknown>)["TIMESHARE_DATA"];
+  if (kv && typeof (kv as KVNamespace).get === "function") {
+    return kv as KVNamespace;
+  }
+  return null;
+}
+
+async function handleKVGet(env: unknown): Promise<Response> {
+  const kv = getKVFromEnv(env);
+  if (!kv) {
+    return Response.json({ ok: false, data: null, debug: "no_kv_binding" });
+  }
+  try {
+    const raw = await kv.get(KV_KEY);
+    if (!raw) return Response.json({ ok: true, data: null });
+    const parsed = JSON.parse(raw);
+    return Response.json({ ok: true, data: parsed });
+  } catch (e) {
+    return Response.json({ ok: false, data: null, debug: `get_error: ${String(e)}` });
+  }
+}
+
+async function handleKVPut(request: Request, env: unknown): Promise<Response> {
+  const kv = getKVFromEnv(env);
+  if (!kv) {
+    return Response.json({ ok: false, debug: "no_kv_binding" });
+  }
+  try {
+    const body = await request.json();
+    await kv.put(KV_KEY, JSON.stringify(body));
+    return Response.json({ ok: true });
+  } catch (e) {
+    return Response.json({ ok: false, debug: `put_error: ${String(e)}` });
+  }
+}
+
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
-    // Inject Cloudflare env (KV, D1, secrets) globally so server functions can access it.
+    // Inject Cloudflare env globally (still useful for other server functions).
     setWorkerEnv(env);
+
+    // Handle KV API routes directly — bypasses TanStack Start entirely.
+    const url = new URL(request.url);
+    if (url.pathname === "/api/kv/consultants") {
+      if (request.method === "GET") return handleKVGet(env);
+      if (request.method === "POST") return handleKVPut(request, env);
+      return new Response("Method not allowed", { status: 405 });
+    }
+
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
