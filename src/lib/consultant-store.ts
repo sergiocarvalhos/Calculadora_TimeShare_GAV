@@ -118,6 +118,89 @@ export async function forcePushConsultantsToKV(): Promise<{ ok: boolean; debug?:
   }
 }
 
+// ===== BULK IMPORT =====
+
+export type BulkImportRow = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  role?: ConsultantRole;
+};
+
+export type BulkImportResult = {
+  created: Consultant[];
+  errors: { row: number; email: string; name: string; reason: string }[];
+};
+
+/**
+ * Imports a list of consultants in bulk.
+ * - PIN is set to "123456" with mustChangePin=true for all.
+ * - Validates email format and detects duplicates (within the file and existing list).
+ * - Saves all valid rows in a single write + KV push.
+ */
+export async function importConsultantsInBulk(rows: BulkImportRow[]): Promise<BulkImportResult> {
+  const existing = getConsultants();
+  const existingEmails = new Set(existing.map((c) => c.email.toLowerCase()));
+  const seenInBatch = new Set<string>();
+
+  const created: Consultant[] = [];
+  const errors: BulkImportResult["errors"] = [];
+
+  const VALID_ROLES: ConsultantRole[] = ["Consultor", "Supervisor", "Administrador"];
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const DEFAULT_PIN = "123456";
+
+  rows.forEach((row, i) => {
+    const rowNum = i + 1;
+    const firstName = (row.firstName ?? "").trim();
+    const lastName = (row.lastName ?? "").trim();
+    const email = (row.email ?? "").trim().toLowerCase();
+    const name = `${firstName} ${lastName}`.trim() || `(linha ${rowNum})`;
+    const role: ConsultantRole = VALID_ROLES.includes(row.role as ConsultantRole)
+      ? (row.role as ConsultantRole)
+      : "Consultor";
+
+    if (!firstName && !lastName) {
+      errors.push({ row: rowNum, email, name, reason: "Nome obrigatório" });
+      return;
+    }
+    if (!EMAIL_RE.test(email)) {
+      errors.push({ row: rowNum, email, name, reason: "E-mail inválido" });
+      return;
+    }
+    if (existingEmails.has(email)) {
+      errors.push({ row: rowNum, email, name, reason: "E-mail já cadastrado" });
+      return;
+    }
+    if (seenInBatch.has(email)) {
+      errors.push({ row: rowNum, email, name, reason: "E-mail duplicado na planilha" });
+      return;
+    }
+
+    seenInBatch.add(email);
+    const newConsultant: Consultant = {
+      id: `consultant-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-${rowNum}`,
+      firstName,
+      lastName,
+      email,
+      pin: DEFAULT_PIN,
+      role,
+      active: true,
+      createdAt: new Date().toISOString(),
+      mustChangePin: true,
+    };
+    created.push(newConsultant);
+    existingEmails.add(email);
+  });
+
+  if (created.length > 0) {
+    const updatedList = [...existing, ...created];
+    saveConsultants(updatedList);
+  }
+
+  return { created, errors };
+}
+
 // ===== CRUD =====
 export function addConsultant(
   data: Omit<Consultant, "id" | "createdAt">

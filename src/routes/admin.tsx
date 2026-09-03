@@ -37,8 +37,8 @@ import {
 import { useIsMobile } from "../hooks/use-mobile";
 import { getConfig, saveConfig, resetConfig, generateId, SEASONS, CONFIG_UPDATED_EVENT } from "../lib/config-store";
 import type { AppConfig, Resort, Room, Season } from "../lib/config-store";
-import { getConsultants, addConsultant, toggleConsultantActive, getFullName, CONSULTANTS_UPDATED_EVENT, findConsultantByCredentials, updateConsultant, isValidPin, resetUserPin, syncConsultantsFromKV, forcePushConsultantsToKV } from "../lib/consultant-store";
-import type { Consultant, ConsultantRole } from "../lib/consultant-store";
+import { getConsultants, addConsultant, toggleConsultantActive, getFullName, CONSULTANTS_UPDATED_EVENT, findConsultantByCredentials, updateConsultant, isValidPin, resetUserPin, syncConsultantsFromKV, forcePushConsultantsToKV, importConsultantsInBulk } from "../lib/consultant-store";
+import type { Consultant, ConsultantRole, BulkImportResult } from "../lib/consultant-store";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer,
@@ -267,6 +267,13 @@ function AdminDashboardInner() {
 
   // ===== ADD CONSULTANT MODAL =====
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
+  // ===== BULK IMPORT STATE =====
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
+  const [bulkStep, setBulkStep] = useState<"upload" | "preview" | "done">("upload");
+  const [bulkPreview, setBulkPreview] = useState<{ firstName: string; lastName: string; email: string; role: string }[]>([]);
+  const [bulkResult, setBulkResult] = useState<BulkImportResult | null>(null);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkFileName, setBulkFileName] = useState("");
   const [newFirstName, setNewFirstName] = useState("");
   const [newLastName, setNewLastName] = useState("");
   const [newEmail, setNewEmail] = useState("");
@@ -1299,6 +1306,22 @@ function AdminDashboardInner() {
                     </div>
                   )}
 
+                  {/* BULK IMPORT BUTTON */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBulkStep("upload");
+                      setBulkPreview([]);
+                      setBulkResult(null);
+                      setBulkFileName("");
+                      setIsBulkImportOpen(true);
+                    }}
+                    className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition"
+                  >
+                    <span>⬆</span>
+                    Importar em Massa
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => {
@@ -1833,6 +1856,271 @@ function AdminDashboardInner() {
               >
                 Excluir
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== MODAL: IMPORTAR EM MASSA ==================== */}
+      {isBulkImportOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm"
+            onClick={() => setIsBulkImportOpen(false)}
+          />
+          <div className="relative z-10 w-full max-w-2xl rounded-2xl bg-white shadow-2xl flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#002B5C]/10">
+                  <span className="text-xl">⬆</span>
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">Importar Consultores em Massa</h2>
+                  <p className="text-xs text-slate-500">
+                    {bulkStep === "upload" && "Faça upload de uma planilha .xlsx"}
+                    {bulkStep === "preview" && `${bulkPreview.length} linha(s) encontrada(s) — revise antes de confirmar`}
+                    {bulkStep === "done" && "Importação concluída"}
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setIsBulkImportOpen(false)} className="rounded-lg p-2 hover:bg-slate-100 text-slate-400">✕</button>
+            </div>
+
+            {/* Body */}
+            <div className="overflow-y-auto px-6 py-5 flex-1">
+
+              {/* STEP 1: UPLOAD */}
+              {bulkStep === "upload" && (
+                <div className="space-y-5">
+                  {/* Instructions */}
+                  <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800">
+                    <p className="font-semibold mb-2">📋 Como usar:</p>
+                    <ol className="list-decimal ml-4 space-y-1 text-xs">
+                      <li>Monte uma planilha com as colunas: <strong>Nome | Sobrenome | Email | Cargo</strong></li>
+                      <li>O campo <strong>Cargo</strong> aceita: Consultor, Supervisor, Administrador (padrão: Consultor)</li>
+                      <li>Faça o upload abaixo — o sistema validará cada linha antes de criar</li>
+                      <li>Todos entrarão com PIN inicial <strong>123456</strong> e serão obrigados a trocar no 1° acesso</li>
+                    </ol>
+                  </div>
+
+                  {/* Upload area */}
+                  <label className="flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 p-8 cursor-pointer hover:border-[#002B5C] hover:bg-blue-50 transition-colors">
+                    <span className="text-4xl">📂</span>
+                    <span className="text-sm font-semibold text-slate-700">
+                      {bulkFileName ? `✅ ${bulkFileName}` : "Clique para selecionar o arquivo .xlsx"}
+                    </span>
+                    <span className="text-xs text-slate-400">Somente arquivos .xlsx / .xls</span>
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        setBulkFileName(file.name);
+                        try {
+                          const { read, utils } = await import("xlsx");
+                          const buffer = await file.arrayBuffer();
+                          const wb = read(buffer);
+                          const ws = wb.Sheets[wb.SheetNames[0]];
+                          const raw = utils.sheet_to_json<Record<string, string>>(ws, { defval: "" });
+                          // Normalize column names (case-insensitive)
+                          const rows = raw.map((r) => {
+                            const get = (keys: string[]) => {
+                              for (const k of keys) {
+                                const found = Object.keys(r).find((col) => col.toLowerCase().trim() === k.toLowerCase());
+                                if (found) return String(r[found] ?? "").trim();
+                              }
+                              return "";
+                            };
+                            return {
+                              firstName: get(["nome", "first name", "firstname", "primeiro nome"]),
+                              lastName: get(["sobrenome", "last name", "lastname", "segundo nome"]),
+                              email: get(["email", "e-mail"]),
+                              role: get(["cargo", "role", "perfil"]),
+                            };
+                          }).filter((r) => r.email || r.firstName || r.lastName);
+                          setBulkPreview(rows);
+                          if (rows.length > 0) setBulkStep("preview");
+                        } catch {
+                          alert("Não foi possível ler o arquivo. Verifique se é um arquivo .xlsx válido.");
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+              )}
+
+              {/* STEP 2: PREVIEW */}
+              {bulkStep === "preview" && (() => {
+                const existing = getConsultants();
+                const existingEmails = new Set(existing.map((c) => c.email.toLowerCase()));
+                const seenInBatch = new Set<string>();
+                const VALID_ROLES = ["Consultor", "Supervisor", "Administrador"];
+                const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+                const validated = bulkPreview.map((row, i) => {
+                  const email = (row.email ?? "").trim().toLowerCase();
+                  const name = `${row.firstName} ${row.lastName}`.trim() || `(linha ${i + 1})`;
+                  const role = VALID_ROLES.includes(row.role) ? row.role : "Consultor";
+                  let error = "";
+                  if (!row.firstName && !row.lastName) error = "Nome obrigatório";
+                  else if (!EMAIL_RE.test(email)) error = "E-mail inválido";
+                  else if (existingEmails.has(email)) error = "E-mail já cadastrado";
+                  else if (seenInBatch.has(email)) error = "Duplicado na planilha";
+                  if (!error) seenInBatch.add(email);
+                  return { ...row, email, name, role, error };
+                });
+
+                const okCount = validated.filter((r) => !r.error).length;
+                const errCount = validated.filter((r) => r.error).length;
+
+                return (
+                  <div className="space-y-4">
+                    {/* Summary badges */}
+                    <div className="flex gap-3">
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-700">
+                        ✅ {okCount} prontos
+                      </span>
+                      {errCount > 0 && (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-3 py-1 text-sm font-semibold text-red-700">
+                          ⚠️ {errCount} com erro
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Table */}
+                    <div className="rounded-xl border border-slate-200 overflow-hidden">
+                      <div className="overflow-x-auto max-h-64">
+                        <table className="w-full text-xs text-left">
+                          <thead className="bg-slate-50 border-b border-slate-200">
+                            <tr>
+                              <th className="px-3 py-2 font-semibold text-slate-500">#</th>
+                              <th className="px-3 py-2 font-semibold text-slate-500">Nome</th>
+                              <th className="px-3 py-2 font-semibold text-slate-500">E-mail</th>
+                              <th className="px-3 py-2 font-semibold text-slate-500">Cargo</th>
+                              <th className="px-3 py-2 font-semibold text-slate-500">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {validated.map((row, i) => (
+                              <tr key={i} className={row.error ? "bg-red-50" : "bg-white"}>
+                                <td className="px-3 py-2 text-slate-400">{i + 1}</td>
+                                <td className="px-3 py-2 font-medium text-slate-800">{row.name}</td>
+                                <td className="px-3 py-2 text-slate-600">{row.email || "—"}</td>
+                                <td className="px-3 py-2 text-slate-600">{row.role}</td>
+                                <td className="px-3 py-2">
+                                  {row.error
+                                    ? <span className="text-red-600 font-semibold">✕ {row.error}</span>
+                                    : <span className="text-emerald-600 font-semibold">✓ Ok</span>
+                                  }
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {okCount === 0 && (
+                      <p className="text-sm text-red-600 font-medium">Nenhuma linha válida para importar. Corrija a planilha e tente novamente.</p>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* STEP 3: DONE */}
+              {bulkStep === "done" && bulkResult && (
+                <div className="text-center space-y-4 py-4">
+                  <div className="text-5xl">🎉</div>
+                  <h3 className="text-xl font-bold text-slate-900">
+                    {bulkResult.created.length} consultor(es) importado(s) com sucesso!
+                  </h3>
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 text-left">
+                    <p className="font-semibold mb-1">🔑 PIN inicial de todos:</p>
+                    <p className="text-2xl font-bold tracking-widest text-center text-emerald-700 my-2">123456</p>
+                    <p className="text-xs text-emerald-600 text-center">Cada consultor será obrigado a trocar o PIN no primeiro acesso.</p>
+                  </div>
+                  {bulkResult.errors.length > 0 && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 text-left">
+                      <p className="font-semibold mb-1">⚠️ {bulkResult.errors.length} linha(s) ignorada(s):</p>
+                      <ul className="text-xs space-y-0.5 list-disc ml-4">
+                        {bulkResult.errors.map((e, i) => (
+                          <li key={i}>{e.name} — {e.reason}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="border-t border-slate-100 px-6 py-4 flex justify-between items-center shrink-0">
+              {bulkStep === "upload" && (
+                <button onClick={() => setIsBulkImportOpen(false)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">
+                  Cancelar
+                </button>
+              )}
+              {bulkStep === "preview" && (() => {
+                const existing = getConsultants();
+                const existingEmails = new Set(existing.map((c) => c.email.toLowerCase()));
+                const seenInBatch = new Set<string>();
+                const VALID_ROLES = ["Consultor", "Supervisor", "Administrador"];
+                const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                const okCount = bulkPreview.filter((row) => {
+                  const email = (row.email ?? "").trim().toLowerCase();
+                  if (!row.firstName && !row.lastName) return false;
+                  if (!EMAIL_RE.test(email)) return false;
+                  if (existingEmails.has(email)) return false;
+                  if (seenInBatch.has(email)) return false;
+                  seenInBatch.add(email);
+                  return true;
+                }).length;
+
+                return (
+                  <>
+                    <button
+                      onClick={() => { setBulkStep("upload"); setBulkPreview([]); setBulkFileName(""); }}
+                      className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+                    >
+                      ← Voltar
+                    </button>
+                    <button
+                      disabled={okCount === 0 || bulkLoading}
+                      onClick={async () => {
+                        setBulkLoading(true);
+                        try {
+                          const result = await importConsultantsInBulk(
+                            bulkPreview.map((r) => ({
+                              firstName: r.firstName,
+                              lastName: r.lastName,
+                              email: r.email,
+                              role: (["Consultor", "Supervisor", "Administrador"].includes(r.role) ? r.role : "Consultor") as ConsultantRole,
+                            }))
+                          );
+                          setBulkResult(result);
+                          setBulkStep("done");
+                        } finally {
+                          setBulkLoading(false);
+                        }
+                      }}
+                      className="inline-flex items-center gap-2 rounded-lg bg-[#002B5C] hover:opacity-90 disabled:opacity-40 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition"
+                    >
+                      {bulkLoading ? "Importando..." : `Confirmar ${okCount} consultor(es)`}
+                    </button>
+                  </>
+                );
+              })()}
+              {bulkStep === "done" && (
+                <button
+                  onClick={() => setIsBulkImportOpen(false)}
+                  className="ml-auto rounded-lg bg-[#002B5C] hover:opacity-90 px-5 py-2.5 text-sm font-semibold text-white shadow-md"
+                >
+                  Fechar
+                </button>
+              )}
             </div>
           </div>
         </div>
